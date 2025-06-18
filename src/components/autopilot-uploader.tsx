@@ -37,6 +37,7 @@ const MAX_HASHES = 1000;
 const MAX_FILE_SIZE_MB = 5;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
+// To update the available group tags, edit this array directly.
 const exampleGroupTags = ["Corporate", "Kiosk", "SharedDevice", "Executive", "StandardUser"];
 
 const POWERSHELL_SCRIPT = `New-Item -Type Directory -Path "C:\\HWID" -ErrorAction SilentlyContinue
@@ -54,7 +55,6 @@ export default function AutopilotUploader() {
   const [pastedText, setPastedText] = useState('');
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [selectedGroupTag, setSelectedGroupTag] = useState<string>("");
-  const [customGroupTag, setCustomGroupTag] = useState<string>("");
 
   const [validationIssues, setValidationIssues] = useState<ValidationIssue[]>([]);
   const [overallValidationMessage, setOverallValidationMessage] = useState('');
@@ -64,10 +64,6 @@ export default function AutopilotUploader() {
   const [confirmationDetails, setConfirmationDetails] = useState<ConfirmationDetails | null>(null);
 
   const { toast } = useToast();
-
-  const getCurrentGroupTag = useCallback(() => {
-    return customGroupTag.trim() !== "" ? customGroupTag.trim() : selectedGroupTag;
-  }, [customGroupTag, selectedGroupTag]);
 
   const resetState = useCallback(() => {
     setStage('idle');
@@ -80,7 +76,6 @@ export default function AutopilotUploader() {
     setSubmissionStatusMessage('');
     setConfirmationDetails(null);
     setSelectedGroupTag("");
-    setCustomGroupTag("");
     const fileUploadInput = document.getElementById('file-upload') as HTMLInputElement | null;
     if (fileUploadInput) {
         fileUploadInput.value = "";
@@ -119,8 +114,8 @@ export default function AutopilotUploader() {
             headerSkipped = true;
             continue;
         }
-        if (!headerSkipped && line.trim() !== "") continue; // Skip any lines before the identified header, or empty lines after it.
-        if (line.trim() === "") continue; // Skip empty lines within data
+        if (!headerSkipped && line.trim() !== "") continue; 
+        if (line.trim() === "") continue; 
 
         const columns = line.split(',');
         if (columns.length >= 3) {
@@ -134,8 +129,6 @@ export default function AutopilotUploader() {
         }
       }
     } else {
-      // If not an Autopilot CSV, assume it's a list of hashes, one per line.
-      // Only consider lines that do not contain commas.
       for (const line of lines) {
         if (line.trim() !== "" && !line.includes(',')) {
             outputHashes.push(line);
@@ -199,12 +192,11 @@ export default function AutopilotUploader() {
   }, [setFileName]);
 
   const processInput = useCallback(async (parsedInputHashes: string[]) => {
-    const currentGroupTagValue = getCurrentGroupTag();
-    if (!currentGroupTagValue) {
+    if (!selectedGroupTag) {
         toast({
             variant: "destructive",
             title: "Group Tag Required",
-            description: "Please select or enter a Group Tag before processing.",
+            description: "Please select a Group Tag before processing.",
         });
         setStage('idle');
         return;
@@ -235,7 +227,7 @@ export default function AutopilotUploader() {
         const response = await fetch('/api/upload-to-intune', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deviceHashes: parsedInputHashes, groupTag: currentGroupTagValue }),
+          body: JSON.stringify({ deviceHashes: parsedInputHashes, groupTag: selectedGroupTag }),
         });
         
         setUploadProgress(70);
@@ -246,7 +238,7 @@ export default function AutopilotUploader() {
           setConfirmationDetails({
             count: result.processedCount || parsedInputHashes.length,
             timestamp: new Date().toLocaleString(),
-            groupTag: currentGroupTagValue,
+            groupTag: selectedGroupTag,
             intuneMessage: result.message,
             details: result.details,
           });
@@ -283,7 +275,7 @@ export default function AutopilotUploader() {
         });
       }
     }
-  }, [getCurrentGroupTag, toast, validateHashes]);
+  }, [selectedGroupTag, toast, validateHashes]);
 
 
   const processFile = useCallback((file: File) => {
@@ -344,31 +336,29 @@ export default function AutopilotUploader() {
 
   const handleFileChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    const currentGroupTagValue = getCurrentGroupTag();
     if (file) {
-      if (!currentGroupTagValue) {
+      if (!selectedGroupTag) {
         toast({
             variant: "destructive",
             title: "Group Tag Required",
-            description: "Please select or enter a Group Tag before choosing a file.",
+            description: "Please select a Group Tag before choosing a file.",
         });
         handleFileUploadError(); 
         return;
       }
       processFile(file);
     }
-  }, [getCurrentGroupTag, toast, processFile, handleFileUploadError]);
+  }, [selectedGroupTag, toast, processFile, handleFileUploadError]);
 
   const handleDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
     setIsDraggingOver(false);
-    const currentGroupTagValue = getCurrentGroupTag();
-    if (!currentGroupTagValue) {
+    if (!selectedGroupTag) {
         toast({
             variant: "destructive",
             title: "Group Tag Required",
-            description: "Please select or enter a Group Tag before dropping a file.",
+            description: "Please select a Group Tag before dropping a file.",
         });
         return;
     }
@@ -376,16 +366,15 @@ export default function AutopilotUploader() {
       const file = event.dataTransfer.files[0];
        processFile(file);
     }
-  }, [getCurrentGroupTag, toast, processFile, setIsDraggingOver]); 
+  }, [selectedGroupTag, toast, processFile, setIsDraggingOver]); 
 
   const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    const currentGroupTagValue = getCurrentGroupTag();
-    if (currentGroupTagValue) {
+    if (selectedGroupTag) {
         setIsDraggingOver(true);
     }
-  }, [getCurrentGroupTag, setIsDraggingOver]);
+  }, [selectedGroupTag, setIsDraggingOver]);
 
   const handleDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -394,19 +383,18 @@ export default function AutopilotUploader() {
   }, [setIsDraggingOver]);
 
   const handleProcessPasted = useCallback(() => {
-    const currentGroupTagValue = getCurrentGroupTag();
-    if (!currentGroupTagValue) {
+    if (!selectedGroupTag) {
         toast({
             variant: "destructive",
             title: "Group Tag Required",
-            description: "Please select or enter a Group Tag before processing pasted text.",
+            description: "Please select a Group Tag before processing pasted text.",
         });
         return;
     }
     const parsed = parseHashes(pastedText);
     setFileName("Pasted Hashes"); 
     processInput(parsed);
-  }, [getCurrentGroupTag, toast, pastedText, setFileName, processInput, parseHashes]);
+  }, [selectedGroupTag, toast, pastedText, setFileName, processInput, parseHashes]);
 
   const handleCopyScript = useCallback(() => {
     navigator.clipboard.writeText(POWERSHELL_SCRIPT)
@@ -425,22 +413,21 @@ export default function AutopilotUploader() {
 
 
   const renderIdleUI = () => {
-    const currentGroupTagValue = getCurrentGroupTag();
-    const isGroupTagProvided = !!currentGroupTagValue;
+    const isGroupTagProvided = !!selectedGroupTag;
 
     return (
     <Card className="shadow-lg">
       <CardHeader>
         <CardTitle className="font-headline">Upload Device Hashes</CardTitle>
-        <CardDescription>Choose a method to upload your Autopilot device hashes. Provide a group tag using the dropdown or by entering a custom one.</CardDescription>
+        <CardDescription>Select a Group Tag and choose a method to upload your Autopilot device hashes.</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-6">
             <div className="space-y-2">
                 <Label htmlFor="group-tag-select" className="text-base font-medium">Group Tag</Label>
-                 <Select value={selectedGroupTag} onValueChange={setSelectedGroupTag} disabled={customGroupTag.trim() !== ""}>
+                 <Select value={selectedGroupTag} onValueChange={setSelectedGroupTag}>
                     <SelectTrigger id="group-tag-select" className="w-full">
-                        <SelectValue placeholder="Select a common group tag..." />
+                        <SelectValue placeholder="Select a group tag..." />
                     </SelectTrigger>
                     <SelectContent>
                         {exampleGroupTags.map(tag => (
@@ -448,16 +435,7 @@ export default function AutopilotUploader() {
                         ))}
                     </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground text-center">OR</p>
-                <Input
-                    id="custom-group-tag"
-                    type="text"
-                    placeholder="Enter custom group tag..."
-                    value={customGroupTag}
-                    onChange={(e) => setCustomGroupTag(e.target.value)}
-                    className="w-full"
-                />
-                {!isGroupTagProvided && stage === 'idle' && <p className="text-sm text-destructive mt-1">Please select or enter a group tag to enable upload options.</p>}
+                {!isGroupTagProvided && stage === 'idle' && <p className="text-sm text-destructive mt-1">Please select a group tag to enable upload options.</p>}
             </div>
 
             <Tabs defaultValue="file" className="w-full">
@@ -474,7 +452,7 @@ export default function AutopilotUploader() {
                        toast({
                          variant: "destructive",
                          title: "Group Tag Required",
-                         description: "Please select or enter a Group Tag before uploading a file.",
+                         description: "Please select a Group Tag before uploading a file.",
                        });
                     }
                   }}
@@ -518,7 +496,7 @@ export default function AutopilotUploader() {
                     id="paste-area"
                     value={pastedText}
                     onChange={(e) => setPastedText(e.target.value)}
-                    placeholder={isGroupTagProvided ? "Enter device hashes, one per line..." : "Select or enter a group tag to enable pasting."}
+                    placeholder={isGroupTagProvided ? "Enter device hashes, one per line..." : "Select a group tag to enable pasting."}
                     rows={10}
                     className="text-sm"
                     disabled={!isGroupTagProvided}
@@ -542,7 +520,7 @@ export default function AutopilotUploader() {
           Processing Hashes
         </CardTitle>
         {fileName && <CardDescription>File: {fileName}</CardDescription>}
-        <CardDescription>Group Tag: {getCurrentGroupTag()}</CardDescription>
+        <CardDescription>Group Tag: {selectedGroupTag}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">{submissionStatusMessage || 'Your hashes are being processed. Please wait...'}</p>
@@ -560,7 +538,7 @@ export default function AutopilotUploader() {
           Processing Failed
         </CardTitle>
         {fileName && <CardDescription>File: {fileName}</CardDescription>}
-        <CardDescription>Group Tag: {getCurrentGroupTag()}</CardDescription>
+        <CardDescription>Group Tag: {selectedGroupTag}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <Alert variant="destructive">
@@ -699,7 +677,7 @@ export default function AutopilotUploader() {
         </CardHeader>
         <CardContent>
           <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
-            <li>A Group Tag must be selected from the dropdown or entered manually before uploading or pasting hashes.</li>
+            <li>A Group Tag must be selected from the dropdown before uploading or pasting hashes.</li>
             <li>Maximum file size: {MAX_FILE_SIZE_MB}MB.</li>
             <li>Maximum {MAX_HASHES} hashes per upload.</li>
             <li>Supported formats: .txt or .csv (ensure hashes are in the third column if a CSV header is present, or one per line for .txt).</li>
