@@ -1,11 +1,9 @@
 
 "use client";
 
-import { suggestRemediation } from "@/ai/flows/suggest-remediation";
 import { UploadHashesToIntuneOutput } from "@/ai/flows/upload-to-intune-flow"; // Output type for API response
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -55,10 +53,6 @@ export default function AutopilotUploader() {
 
   const [confirmationDetails, setConfirmationDetails] = useState<ConfirmationDetails | null>(null);
 
-  const [aiSuggestions, setAiSuggestions] = useState<string | null>(null);
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const [showAiDialog, setShowAiDialog] = useState(false);
-
   const { toast } = useToast();
 
   const resetState = useCallback(() => {
@@ -71,9 +65,6 @@ export default function AutopilotUploader() {
     setOverallValidationMessage('');
     setSubmissionStatusMessage('');
     setConfirmationDetails(null);
-    setAiSuggestions(null);
-    setIsAiLoading(false);
-    setShowAiDialog(false);
     setSelectedGroupTag("");
     const fileUploadInput = document.getElementById('file-upload') as HTMLInputElement | null;
     if (fileUploadInput) {
@@ -163,7 +154,7 @@ export default function AutopilotUploader() {
       setStage('validationFailed');
     } else {
       setOverallValidationMessage('Client-side validation passed.');
-      setSubmissionStatusMessage('Submitting to Intune (simulated)...');
+      setSubmissionStatusMessage('Submitting to Intune...');
       try {
         const response = await fetch('/api/upload-to-intune', {
           method: 'POST',
@@ -180,7 +171,7 @@ export default function AutopilotUploader() {
             groupTag: selectedGroupTag,
             intuneMessage: result.message,
           });
-          setOverallValidationMessage(result.message); // Display Intune success message
+          setOverallValidationMessage(result.message); 
           setStage('success');
         } else {
            const errorMessage = result.message || (result as any).error || `Failed to submit to Intune. Status: ${response.status}`;
@@ -335,34 +326,6 @@ export default function AutopilotUploader() {
     processInput(parsed);
   };
 
-  const handleGetAiSuggestions = async () => {
-    if (!overallValidationMessage) return;
-    setIsAiLoading(true);
-    setAiSuggestions(null);
-    setShowAiDialog(true);
-
-    // Prepare a summary of issues for the AI
-    let issuesForAI = overallValidationMessage;
-    if (validationIssues.length > 0) {
-        issuesForAI = "Validation issues found:\n" + validationIssues.map(issue => `- ${issue.message}${issue.count ? ` (${issue.count} occurrences)` : ''}`).join('\n');
-    }
-
-    try {
-      const result = await suggestRemediation({ validationResults: issuesForAI });
-      setAiSuggestions(result.suggestions);
-    } catch (error) {
-      console.error("AI suggestion error:", error);
-      setAiSuggestions("Failed to get AI suggestions. Please try again later.");
-      toast({
-        variant: "destructive",
-        title: "AI Error",
-        description: "Could not fetch AI remediation suggestions.",
-      });
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
-  
   useEffect(() => {
   }, [stage, uploadProgress, validationIssues, confirmationDetails]);
 
@@ -511,11 +474,6 @@ export default function AutopilotUploader() {
       </CardContent>
       <CardFooter className="flex flex-col sm:flex-row justify-end gap-2">
         <Button variant="outline" onClick={resetState}>Try Again</Button>
-        {(validationIssues.length > 0 || overallValidationMessage) && (
-            <Button onClick={handleGetAiSuggestions} className="bg-accent hover:bg-accent/90 text-accent-foreground">
-            <Sparkles className="mr-2 h-4 w-4" /> Get AI Remediation
-            </Button>
-        )}
       </CardFooter>
     </Card>
   );
@@ -567,8 +525,7 @@ export default function AutopilotUploader() {
             <li>Maximum {MAX_HASHES} hashes per upload.</li>
             <li>Supported formats: .txt or .csv (ensure hashes are in the first column or one per line for .txt).</li>
             <li>Each hash should be on a new line.</li>
-            <li>For AI Remediation, ensure your validation messages are descriptive.</li>
-            <li>The Intune upload is currently a **simulated** process for prototyping.</li>
+            <li>The Intune upload requires proper Azure AD app registration and environment variables.</li>
           </ul>
         </CardContent>
       </Card>
@@ -578,35 +535,7 @@ export default function AutopilotUploader() {
       {stage === 'validationFailed' && renderValidationFailedUI()}
       {stage === 'success' && renderSuccessUI()}
 
-      <Dialog open={showAiDialog} onOpenChange={setShowAiDialog}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center font-headline">
-              <Sparkles className="mr-2 h-5 w-5 text-primary" />
-              AI Remediation Suggestions
-            </DialogTitle>
-            <DialogDescription>
-              Here are AI-powered suggestions based on the validation results.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 max-h-[60vh] overflow-y-auto">
-            {isAiLoading && (
-              <div className="flex items-center justify-center space-x-2">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <p className="text-muted-foreground">Generating suggestions...</p>
-              </div>
-            )}
-            {aiSuggestions && (
-              <div className="prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap p-4 bg-muted/50 rounded-md">
-                {aiSuggestions}
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setShowAiDialog(false)} variant="outline">Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
+
