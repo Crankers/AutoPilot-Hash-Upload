@@ -108,11 +108,13 @@ The list of available Autopilot Group Tags in the dropdown can be customized via
     [
       {"displayName": "Quanta Services", "backendTag": "QCO"},
       {"displayName": "Nationwide Insurance", "backendTag": "NWI"}
+      {"displayName": "Honda Moters Corp", "backendTag": "HMC"}
+      {"displayName": "Chase Bank Ohio", "backendTag": "CBO"}
     ]
     ```
     To use this example, you would set the `NEXT_PUBLIC_GROUP_TAG_LIST` environment variable to the above JSON string (ensure it's a single line or properly escaped if your environment requires it).
 *   If this environment variable is not set or is invalid JSON, the application will fall back to a default list of group tags.
-*   NEXT_PUBLIC_GROUP_TAG_LIST='[{"displayName": "Quanta Services", "backendTag": "QCO"}, {"displayName": "Nationwide Insurance", "backendTag": "NWI"}]'
+*   NEXT_PUBLIC_GROUP_TAG_LIST='[{"displayName": "Quanta Services", "backendTag": "QCO"}, {"displayName": "Nationwide Insurance", "backendTag": "NWI"}, {"displayName": "Honda Moters Corp", "backendTag": "HMC"}, {"displayName": "Chase Bank Ohio", "backendTag": "CBO"}]'
 
 
 
