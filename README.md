@@ -88,3 +88,13 @@ This Next.js application is configured to produce a standalone output, suitable 
 *   Access your application via the URL provided by Azure App Service (e.g., `https://<yourappservicename>.azurewebsites.net`).
 *   Monitor logs via "Monitoring" -> "Log stream" in the Azure portal for any issues.
 *   It might take a few minutes for the app to start after deployment.
+
+
+### Important Information
+*   A Group Tag must be selected from the dropdown before uploading or pasting hashes.
+*   Maximum file size: 5MB.
+*   Maximum 1000 hashes per upload.
+*   Supported formats: .txt or .csv (ensure hashes are in the third column if a CSV header is present, or one per line for .txt).
+*   Each hash should be on a new line and be a valid Base64 string (typically the 4K HH).
+*   The Intune upload requires proper Azure AD app registration and environment variables (GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET, GRAPH_TENANT_ID).
+*   To update the available Group Tags, edit the `exampleGroupTags` array at the top of the `src/components/autopilot-uploader.tsx` file.
