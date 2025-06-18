@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { AlertCircle, CheckCircle2, ClipboardPaste, FileText, Loader2, Sparkles, UploadCloud, XCircle, Tag, ClipboardCopy, Info } from "lucide-react";
+import { AlertCircle, CheckCircle2, ClipboardPaste, FileText, Loader2, Sparkles, UploadCloud, XCircle, Tag, ClipboardCopy, Info, ExternalLink } from "lucide-react";
 import React, { useState, useCallback, DragEvent, ChangeEvent, useEffect } from "react";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -42,8 +42,6 @@ const MAX_HASHES = 1000;
 const MAX_FILE_SIZE_MB = 5;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
-// To update the available group tags, edit this array directly.
-// Each object should have a 'displayName' for the UI and a 'backendTag' (3-4 letters) for the API.
 const exampleGroupTags: GroupTagOption[] = [
   { displayName: "Corporate Standard", backendTag: "CORP" },
   { displayName: "Kiosk Device", backendTag: "KIOS" },
@@ -58,42 +56,6 @@ $env:Path += ";C:\\Program Files\\WindowsPowerShell\\Scripts"
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Unrestricted -Force
 Install-Script -Name Get-WindowsAutopilotInfo -Force -Confirm:$false
 Get-WindowsAutopilotInfo.ps1 -OutputFile AutopilotHWID.csv`;
-
-const POWERSHELL_SCRIPT_NO_ADMIN = `#Get Hardware Hash WithOut Admin Rights
-#Change Current Diretory so OA3Tool finds the files written in the Config File 
-&cd $PSScriptRoot
-#Delete old Files if exits
-if (Test-Path $PSScriptRoot\\OA3.xml) 
-{
-  Remove-Item $PSScriptRoot\\OA3.xml
-}
-
-#Get SN from WMI
-$serial = (Get-WmiObject -Class Win32_BIOS).SerialNumber
-$SystemInfo = Get-CimInstance -Class Win32_ComputerSystem
-$Manufacturer = $SystemInfo.Manufacturer.Trim()
-$model = $SystemInfo.Model.Trim()
-
-#Run OA3Tool
-$hide = &$PSScriptRoot\\oa3tool.exe /Report /ConfigFile=$PSScriptRoot\\OA3.cfg /NoKeyCheck
-
-
-#Check if Hash was found
-If (Test-Path $PSScriptRoot\\OA3.xml) 
-{
-
-#Read Hash from generated XML File
-[xml]$xmlhash = Get-Content -Path "$PSScriptRoot\\OA3.xml"
-$hash = $xmlhash.Key.HardwareHash
-
-#Delete XML File
-del $PSScriptRoot\\OA3.xml
-
-}
-
-#################################################################################
-$hash
-`;
 
 
 export default function AutopilotUploader() {
@@ -470,18 +432,6 @@ export default function AutopilotUploader() {
       });
   }, [toast]);
 
-  const handleCopyNoAdminScript = useCallback(() => {
-    navigator.clipboard.writeText(POWERSHELL_SCRIPT_NO_ADMIN)
-      .then(() => {
-        toast({ title: "Non-Admin Script Copied!", description: "PowerShell script (no admin - OA3Tool) copied to clipboard." });
-      })
-      .catch(err => {
-        toast({ variant: "destructive", title: "Copy Failed", description: "Could not copy non-admin script." });
-        console.error('Failed to copy non-admin script: ', err);
-      });
-  }, [toast]);
-
-
   useEffect(() => {
   }, [stage, uploadProgress, validationIssues, confirmationDetails]);
 
@@ -747,47 +697,30 @@ export default function AutopilotUploader() {
       <CardHeader>
         <CardTitle className="font-headline text-lg flex items-center">
           <Info className="mr-2 h-5 w-5 text-primary" />
-          How to Collect Hardware Hash (No Admin - Requires OA3Tool)
+          How to Collect Hardware Hash (No Admin - GitHub Script)
         </CardTitle>
         <CardDescription>
-          This script uses <code>oa3tool.exe</code> to collect the hardware hash without admin rights. Requires <code>oa3tool.exe</code> and <code>OA3.cfg</code>. Success may vary.
+          This method uses a PowerShell script from an external GitHub repository to attempt to collect the hardware hash without local admin rights.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div>
           <Label className="font-semibold">Instructions:</Label>
           <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground mt-1">
-            <li><strong>Prerequisites:</strong> This script requires <code>oa3tool.exe</code> and a corresponding <code>OA3.cfg</code> file. These tools are typically part of the Windows ADK or OEM preinstallation kits. Ensure they are accessible.</li>
-            <li>Save the script below as a PowerShell file (e.g., <code>Get-HWID-NoAdmin.ps1</code>) in a directory on the target Windows device.</li>
-            <li>Place <code>oa3tool.exe</code> and <code>OA3.cfg</code> in the <strong>same directory</strong> as your saved <code>.ps1</code> script.</li>
+            <li>
+              Go to the GitHub repository: <a href="https://github.com/Crankers/Invoke-GetHardwareHashWithoutAdmin/tree/main/PowerShell" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center">
+                Crankers/Invoke-GetHardwareHashWithoutAdmin <ExternalLink className="ml-1 h-3 w-3" />
+              </a>
+            </li>
+            <li>Download the <code>Invoke-GetHardwareHashWithoutAdmin.ps1</code> script file to your target Windows device.</li>
             <li>Open PowerShell (does not need to be as Administrator) on the target device.</li>
-            <li>Navigate to the directory where you saved the files: <code>cd C:\Path\To\Your\ScriptDirectory</code>.</li>
-            <li>Run the script: <code>.\Get-HWID-NoAdmin.ps1</code>.</li>
-            <li>If successful, the script will output the hardware hash directly to the PowerShell console.</li>
+            <li>Navigate to the directory where you saved the script. For example, if you saved it to Downloads: <code>cd $HOME\Downloads</code></li>
+            <li>Unblock the script file (if necessary): <code>Unblock-File -Path .\Invoke-GetHardwareHashWithoutAdmin.ps1</code></li>
+            <li>Run the script: <code>.\Invoke-GetHardwareHashWithoutAdmin.ps1</code></li>
+            <li>The script will output the hardware hash directly to the PowerShell console.</li>
             <li>Copy this hash from the console and paste it into the "Paste Hashes" tab in the uploader.</li>
-            <li><strong>Note:</strong> This method's success depends on the availability of <code>oa3tool.exe</code>, <code>OA3.cfg</code>, and system permissions. If it fails, you may need to use the admin script or consult with an administrator.</li>
+            <li><strong>Note:</strong> This method's success may depend on system permissions and execution policies. If it fails, you may need to use the admin script or consult with an administrator.</li>
           </ol>
-        </div>
-        <div>
-          <Label htmlFor="powershell-script-no-admin-display" className="font-semibold">PowerShell Script (No Admin - OA3Tool):</Label>
-          <div className="mt-1 relative">
-            <Textarea
-              id="powershell-script-no-admin-display"
-              readOnly
-              value={POWERSHELL_SCRIPT_NO_ADMIN}
-              className="bg-muted/50 font-mono text-xs h-64 resize-none" 
-              rows={10} 
-            />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleCopyNoAdminScript}
-              className="absolute top-2 right-2 h-7 w-7"
-              title="Copy Non-Admin Script (OA3Tool)"
-            >
-              <ClipboardCopy className="h-4 w-4" />
-            </Button>
-          </div>
         </div>
       </CardContent>
     </Card>
@@ -824,4 +757,6 @@ export default function AutopilotUploader() {
     </div>
   );
 }
+    
+
     
