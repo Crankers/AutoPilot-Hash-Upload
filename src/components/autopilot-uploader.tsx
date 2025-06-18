@@ -756,7 +756,14 @@ export default function AutopilotUploader() {
             <li>The script will attempt to download <code>Invoke-GetHardwareHashWithoutAdmin.ps1</code> from GitHub to a temporary location and then execute it.</li>
             <li>The hardware hash should be displayed in the PowerShell console upon successful execution.</li>
             <li>Copy this hash from the console and paste it into the "Paste Hashes" tab in the uploader above.</li>
-            <li><strong>Note:</strong> This method's success may depend on internet connectivity, system permissions, and PowerShell execution policies. If it fails, you may need to use the admin script or consult with an administrator. The script might prompt for confirmation if your execution policy is restrictive.</li>
+            <li><strong>Note:</strong> This method's success may depend on internet connectivity, system permissions, and PowerShell execution policies. 
+                If the script fails to download the file (e.g., showing a 404 Not Found error), your network might be blocking access or there could be a temporary issue. 
+                In such cases, you can manually download the <code>Invoke-GetHardwareHashWithoutAdmin.ps1</code> script from the 
+                <a href="https://github.com/Crankers/Invoke-GetHardwareHashWithoutAdmin/tree/main/PowerShell" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline ml-1">
+                GitHub repository <ExternalLink className="inline-block h-3 w-3 ml-0.5" />
+                </a>, then run it locally. 
+                The script might prompt for confirmation if your execution policy is restrictive.
+            </li>
           </ol>
         </div>
          <div>
@@ -820,3 +827,4 @@ export default function AutopilotUploader() {
     
 
     
+
