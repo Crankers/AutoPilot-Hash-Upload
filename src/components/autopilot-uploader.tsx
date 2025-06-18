@@ -750,13 +750,15 @@ export default function AutopilotUploader() {
       {stage === 'success' && renderSuccessUI()}
 
       <div className="pt-4 space-y-8">
-         {renderCollectHashAdminUI()}
          {renderCollectHashNoAdminUI()}
+         {renderCollectHashAdminUI()}
       </div>
 
     </div>
   );
 }
+    
+
     
 
     
