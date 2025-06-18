@@ -806,7 +806,7 @@ export default function AutopilotUploader() {
                     <li>Attempt to execute <code>Invoke-GetHardwareHashWithoutAdmin.ps1</code>.</li>
                 </ul>
             </li>
-            <li>The hardware hash should be displayed in the PowerShell console upon successful execution.</li>
+            <li>The hardware hash will be saved to a <code>hash.txt</code> file in your Downloads folder.</li>
             <li>The script will also attempt to clean up the downloaded ZIP file and the extracted folder from your temporary directory after execution.</li>
             <li>
                 <strong>Troubleshooting:</strong>
