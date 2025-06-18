@@ -42,6 +42,8 @@ const MAX_HASHES = 1000;
 const MAX_FILE_SIZE_MB = 5;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
+// To update the available group tags, edit this array directly.
+// Each object should have a 'displayName' for the UI and a 'backendTag' (3-4 letters) for the API.
 const exampleGroupTags: GroupTagOption[] = [
   { displayName: "Corporate Standard", backendTag: "CORP" },
   { displayName: "Kiosk Device", backendTag: "KIOS" },
@@ -169,14 +171,13 @@ export default function AutopilotUploader() {
     if (isAutopilotCsv) {
       let headerSkipped = false;
       for (const line of lines) {
-        // Robust header skipping: skip if current line matches the identified first line OR if it's a common variation
         if (!headerSkipped && (line.toLowerCase() === firstLineLower || 
             (line.toLowerCase().includes('device serial number') && line.toLowerCase().includes('hardware hash'))
         )) {
             headerSkipped = true;
             continue;
         }
-        if (!headerSkipped && line.trim() !== "") continue; // Skip any other preamble non-empty lines before header
+        if (!headerSkipped && line.trim() !== "") continue; 
         if (line.trim() === "") continue; 
 
         const columns = line.split(',');
@@ -191,8 +192,6 @@ export default function AutopilotUploader() {
         }
       }
     } else {
-      // If not a CSV, assume it's a list of hashes, one per line.
-      // Only add lines that do not contain commas.
       for (const line of lines) {
         if (line.trim() !== "" && !line.includes(',')) {
             outputHashes.push(line);
@@ -783,8 +782,8 @@ export default function AutopilotUploader() {
               id="powershell-script-no-admin-display"
               readOnly
               value={POWERSHELL_SCRIPT_NO_ADMIN}
-              className="bg-muted/50 font-mono text-xs h-64 resize-none" // Increased height
-              rows={10} // Increased rows
+              className="bg-muted/50 font-mono text-xs h-64 resize-none" 
+              rows={10} 
             />
             <Button
               variant="ghost"
