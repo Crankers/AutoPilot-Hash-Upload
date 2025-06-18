@@ -1,3 +1,4 @@
+
 import AutopilotUploader from '@/components/autopilot-uploader';
 import { PawPrint } from 'lucide-react'; // Placeholder for a more relevant logo icon
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -10,7 +11,7 @@ export default function HomePage() {
           <div className="flex items-center">
             <PawPrint className="h-8 w-8 text-primary" />
             <h1 className="ml-3 text-2xl font-headline font-semibold text-foreground">
-              AutoPilot Uploader
+              Self-Help AutoPilot Hash Uploader
             </h1>
           </div>
           <ThemeToggle />
