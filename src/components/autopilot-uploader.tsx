@@ -570,7 +570,7 @@ export default function AutopilotUploader() {
             </TabsContent>
             <TabsContent value="paste" className="mt-6">
                 <div className="space-y-4">
-                <Label htmlFor="paste-area" className="text-base">Paste your hashes here (one per line):</Label>
+                <Label htmlFor="paste-area" className="text-base whitespace-nowrap">Paste your hashes here (one per line):</Label>
                 <Textarea
                     id="paste-area"
                     value={pastedText}
