@@ -42,8 +42,6 @@ const MAX_HASHES = 1000;
 const MAX_FILE_SIZE_MB = 5;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
-// To update the available group tags, edit this array directly.
-// Each object should have a 'displayName' for the UI and a 'backendTag' (3-4 chars) for the API.
 const exampleGroupTags: GroupTagOption[] = [
   { displayName: "Corporate Standard", backendTag: "CORP" },
   { displayName: "Kiosk Device", backendTag: "KIOS" },
@@ -52,12 +50,54 @@ const exampleGroupTags: GroupTagOption[] = [
   { displayName: "Standard User", backendTag: "STDU" },
 ];
 
-const POWERSHELL_SCRIPT = `New-Item -Type Directory -Path "C:\\HWID" -ErrorAction SilentlyContinue
+const POWERSHELL_SCRIPT_ADMIN = `New-Item -Type Directory -Path "C:\\HWID" -ErrorAction SilentlyContinue
 Set-Location -Path "C:\\HWID"
 $env:Path += ";C:\\Program Files\\WindowsPowerShell\\Scripts"
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Unrestricted -Force
 Install-Script -Name Get-WindowsAutopilotInfo -Force -Confirm:$false
 Get-WindowsAutopilotInfo.ps1 -OutputFile AutopilotHWID.csv`;
+
+const POWERSHELL_SCRIPT_NO_ADMIN = `# Script to attempt collecting Hardware Hash without Admin rights.
+# Results may vary based on system configuration and permissions.
+# This script will attempt to save a .txt file with the hash to your Desktop.
+
+$ErrorActionPreference = "SilentlyContinue"
+$ProgressPreference = "SilentlyContinue"
+
+Write-Host "Attempting to collect hardware hash (4K HH)..."
+
+try {
+    # Try to get the specific WMI object containing the 4K Hardware Hash
+    $DevDetail = Get-CimInstance -Namespace "root/cimv2/mdm/dmmap" -ClassName "MDM_DevDetail_Ext01" -Filter "InstanceID='Ext/Microsoft/WindowsAutopilot/AutopilotConfiguration'" -ErrorAction Stop
+    
+    if ($DevDetail -and $DevDetail.DeviceHardwareData) {
+        $DeviceHardwareData = $DevDetail.DeviceHardwareData
+        
+        # The DeviceHardwareData is a byte array, convert it to a Base64 string for the 4K HH
+        $HardwareHash = [Convert]::ToBase64String($DeviceHardwareData)
+        
+        $OutputFile = "$env:USERPROFILE\\Desktop\\AutopilotHWID_NoAdmin.txt"
+        
+        # Save the hash to a file on the user's Desktop
+        Set-Content -Path $OutputFile -Value $HardwareHash -Encoding UTF8
+        
+        Write-Host "Hardware Hash (4K HH) collected successfully."
+        Write-Host "Saved to: $OutputFile"
+        Write-Host "Please open this file, copy its content (a single line of text), and paste it into the uploader."
+    } else {
+        Write-Warning "Could not retrieve DeviceHardwareData using the primary method."
+        Write-Warning "This can happen if the WMI classes are not populated or if permissions are insufficient."
+        Write-Warning "Ensure the device is connected to the internet and has been through OOBE at least once."
+        Write-Warning "If this persists, you may need to use the 'Collect with Admin Rights' script or have an administrator assist."
+    }
+}
+catch {
+    Write-Warning "An error occurred: $($_.Exception.Message)"
+    Write-Warning "Could not retrieve DeviceHardwareData. This often indicates insufficient permissions or the WMI provider is not available/populated for the current user."
+    Write-Warning "You might need to use the 'Collect with Admin Rights' script or have an administrator run it."
+}
+`;
+
 
 export default function AutopilotUploader() {
   const [stage, setStage] = useState<UploadStage>('idle');
@@ -117,7 +157,7 @@ export default function AutopilotUploader() {
             break;
         }
     }
-    if (!firstNonEmptyLine) return []; // No content after trimming and filtering
+    if (!firstNonEmptyLine) return []; 
 
     const firstLineLower = firstNonEmptyLine.toLowerCase();
 
@@ -129,23 +169,23 @@ export default function AutopilotUploader() {
     if (isAutopilotCsv) {
       let headerSkipped = false;
       for (const line of lines) {
-        if (!headerSkipped && line.toLowerCase() === firstLineLower) { // Compare with the detected first line
+        // Robust header skipping: skip if current line matches the identified first line OR if it's a common variation
+        if (!headerSkipped && (line.toLowerCase() === firstLineLower || 
+            (line.toLowerCase().includes('device serial number') && line.toLowerCase().includes('hardware hash'))
+        )) {
             headerSkipped = true;
             continue;
         }
-        // If header hasn't been skipped yet and current line is not empty, it must be part of the header or invalid.
-        // This helps skip multiple header lines or preamble text if present.
-        if (!headerSkipped && line.trim() !== "") continue;
-        if (line.trim() === "") continue; // Skip empty lines after header
+        if (!headerSkipped && line.trim() !== "") continue; // Skip any other preamble non-empty lines before header
+        if (line.trim() === "") continue; 
 
         const columns = line.split(',');
         if (columns.length >= 3) {
-          let hash = columns[2].trim(); // Hardware Hash is typically the 3rd column (index 2)
-          // Remove surrounding quotes if present
+          let hash = columns[2].trim(); 
           if (hash.startsWith('"') && hash.endsWith('"')) {
             hash = hash.substring(1, hash.length - 1);
           }
-          if (hash.length > 0) { // Ensure hash is not empty after trimming quotes
+          if (hash.length > 0) { 
             outputHashes.push(hash);
           }
         }
@@ -176,8 +216,6 @@ export default function AutopilotUploader() {
     const seen = new Set<string>();
     const duplicates: string[] = [];
     hashes.forEach(hash => {
-      // Updated regex: more specific to Base64, allows for padding, and checks length.
-      // A typical Autopilot hash is ~4000 chars but can vary. Minimum length for a meaningful hash is arbitrary but set to avoid tiny strings.
       if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(hash) || hash.length < 20) {
          if(hash !== "duplicate_hash_example" && hash !== "another_duplicate" && hash !== "invalid_hash_example") {
           issues.push({ type: 'invalid_format', message: `Hash "${hash.substring(0,30)}..." appears to have an invalid format, unsupported characters, or is too short. Hashes should be Base64 encoded.`, count: (issues.find(i => i.type === 'invalid_format')?.count || 0) + 1 });
@@ -276,7 +314,7 @@ export default function AutopilotUploader() {
                 const errorObj = (result.details as any).error;
                 if (errorObj && errorObj.message) {
                     errorMessage = `Intune API Error: ${errorObj.message}`;
-                } else if (JSON.stringify(result.details).length < 500) { // Avoid overly long string details
+                } else if (JSON.stringify(result.details).length < 500) { 
                     errorMessage = `Failed to submit to Intune. Details: ${JSON.stringify(result.details)}`;
                 }
             } else if (typeof result.details === 'string' && result.details.length > 0 && result.details.length < 500) { 
@@ -427,14 +465,25 @@ export default function AutopilotUploader() {
     processInput(parsed);
   }, [selectedBackendTag, toast, pastedText, setFileName, processInput, parseHashes]);
 
-  const handleCopyScript = useCallback(() => {
-    navigator.clipboard.writeText(POWERSHELL_SCRIPT)
+  const handleCopyAdminScript = useCallback(() => {
+    navigator.clipboard.writeText(POWERSHELL_SCRIPT_ADMIN)
       .then(() => {
-        toast({ title: "Script Copied!", description: "PowerShell script copied to clipboard." });
+        toast({ title: "Admin Script Copied!", description: "PowerShell script (admin) copied to clipboard." });
       })
       .catch(err => {
-        toast({ variant: "destructive", title: "Copy Failed", description: "Could not copy script." });
-        console.error('Failed to copy script: ', err);
+        toast({ variant: "destructive", title: "Copy Failed", description: "Could not copy admin script." });
+        console.error('Failed to copy admin script: ', err);
+      });
+  }, [toast]);
+
+  const handleCopyNoAdminScript = useCallback(() => {
+    navigator.clipboard.writeText(POWERSHELL_SCRIPT_NO_ADMIN)
+      .then(() => {
+        toast({ title: "Non-Admin Script Copied!", description: "PowerShell script (no admin) copied to clipboard." });
+      })
+      .catch(err => {
+        toast({ variant: "destructive", title: "Copy Failed", description: "Could not copy non-admin script." });
+        console.error('Failed to copy non-admin script: ', err);
       });
   }, [toast]);
 
@@ -646,12 +695,12 @@ export default function AutopilotUploader() {
     </Card>
   );
 
-  const renderCollectHashUI = () => (
+  const renderCollectHashAdminUI = () => (
     <Card className="shadow-md">
       <CardHeader>
         <CardTitle className="font-headline text-lg flex items-center">
           <Info className="mr-2 h-5 w-5 text-primary" />
-          How to Collect Hardware Hash
+          How to Collect Hardware Hash (Requires Admin Rights)
         </CardTitle>
         <CardDescription>
           Follow these steps on the target Windows device to obtain its hardware hash for Autopilot.
@@ -675,21 +724,74 @@ export default function AutopilotUploader() {
           </ol>
         </div>
         <div>
-          <Label htmlFor="powershell-script-display" className="font-semibold">PowerShell Script:</Label>
+          <Label htmlFor="powershell-script-admin-display" className="font-semibold">PowerShell Script (Admin):</Label>
           <div className="mt-1 relative">
             <Textarea
-              id="powershell-script-display"
+              id="powershell-script-admin-display"
               readOnly
-              value={POWERSHELL_SCRIPT}
+              value={POWERSHELL_SCRIPT_ADMIN}
               className="bg-muted/50 font-mono text-xs h-48 resize-none"
               rows={7}
             />
             <Button
               variant="ghost"
               size="icon"
-              onClick={handleCopyScript}
+              onClick={handleCopyAdminScript}
               className="absolute top-2 right-2 h-7 w-7"
-              title="Copy Script"
+              title="Copy Admin Script"
+            >
+              <ClipboardCopy className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+  const renderCollectHashNoAdminUI = () => (
+    <Card className="shadow-md">
+      <CardHeader>
+        <CardTitle className="font-headline text-lg flex items-center">
+          <Info className="mr-2 h-5 w-5 text-primary" />
+          How to Collect Hardware Hash (Without Admin Rights - Experimental)
+        </CardTitle>
+        <CardDescription>
+          This script attempts to collect the hardware hash without admin rights. Success may vary.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <Label className="font-semibold">Instructions:</Label>
+          <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground mt-1">
+            <li>Open PowerShell (does not need to be as Administrator) on the target Windows device.</li>
+            <li>Copy the script below.</li>
+            <li>Paste the script into the PowerShell window and press Enter.</li>
+            <li>The script will attempt to:
+              <ul className="list-disc list-inside pl-4">
+                  <li>Query WMI for the 4K Hardware Hash.</li>
+                  <li>Save the hash to <code>YourUserProfile\Desktop\AutopilotHWID_NoAdmin.txt</code>.</li>
+              </ul>
+            </li>
+            <li>If successful, open the generated .txt file, copy the hash, and paste it into the uploader.</li>
+            <li>If it fails, you may need to use the admin script or consult with an administrator.</li>
+          </ol>
+        </div>
+        <div>
+          <Label htmlFor="powershell-script-no-admin-display" className="font-semibold">PowerShell Script (No Admin):</Label>
+          <div className="mt-1 relative">
+            <Textarea
+              id="powershell-script-no-admin-display"
+              readOnly
+              value={POWERSHELL_SCRIPT_NO_ADMIN}
+              className="bg-muted/50 font-mono text-xs h-64 resize-none" // Increased height
+              rows={10} // Increased rows
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleCopyNoAdminScript}
+              className="absolute top-2 right-2 h-7 w-7"
+              title="Copy Non-Admin Script"
             >
               <ClipboardCopy className="h-4 w-4" />
             </Button>
@@ -722,12 +824,12 @@ export default function AutopilotUploader() {
       {stage === 'validationFailed' && renderValidationFailedUI()}
       {stage === 'success' && renderSuccessUI()}
 
-      <div className="pt-4">
-         {renderCollectHashUI()}
+      <div className="pt-4 space-y-8">
+         {renderCollectHashAdminUI()}
+         {renderCollectHashNoAdminUI()}
       </div>
 
     </div>
   );
 }
-
     
