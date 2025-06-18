@@ -59,45 +59,40 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Unrestricted -Force
 Install-Script -Name Get-WindowsAutopilotInfo -Force -Confirm:$false
 Get-WindowsAutopilotInfo.ps1 -OutputFile AutopilotHWID.csv`;
 
-const POWERSHELL_SCRIPT_NO_ADMIN = `# Script to attempt collecting Hardware Hash without Admin rights.
-# Results may vary based on system configuration and permissions.
-# This script will attempt to save a .txt file with the hash to your Desktop.
-
-$ErrorActionPreference = "SilentlyContinue"
-$ProgressPreference = "SilentlyContinue"
-
-Write-Host "Attempting to collect hardware hash (4K HH)..."
-
-try {
-    # Try to get the specific WMI object containing the 4K Hardware Hash
-    $DevDetail = Get-CimInstance -Namespace "root/cimv2/mdm/dmmap" -ClassName "MDM_DevDetail_Ext01" -Filter "InstanceID='Ext/Microsoft/WindowsAutopilot/AutopilotConfiguration'" -ErrorAction Stop
-    
-    if ($DevDetail -and $DevDetail.DeviceHardwareData) {
-        $DeviceHardwareData = $DevDetail.DeviceHardwareData
-        
-        # The DeviceHardwareData is a byte array, convert it to a Base64 string for the 4K HH
-        $HardwareHash = [Convert]::ToBase64String($DeviceHardwareData)
-        
-        $OutputFile = "$env:USERPROFILE\\Desktop\\AutopilotHWID_NoAdmin.txt"
-        
-        # Save the hash to a file on the user's Desktop
-        Set-Content -Path $OutputFile -Value $HardwareHash -Encoding UTF8
-        
-        Write-Host "Hardware Hash (4K HH) collected successfully."
-        Write-Host "Saved to: $OutputFile"
-        Write-Host "Please open this file, copy its content (a single line of text), and paste it into the uploader."
-    } else {
-        Write-Warning "Could not retrieve DeviceHardwareData using the primary method."
-        Write-Warning "This can happen if the WMI classes are not populated or if permissions are insufficient."
-        Write-Warning "Ensure the device is connected to the internet and has been through OOBE at least once."
-        Write-Warning "If this persists, you may need to use the 'Collect with Admin Rights' script or have an administrator assist."
-    }
+const POWERSHELL_SCRIPT_NO_ADMIN = `#Get Hardware Hash WithOut Admin Rights
+#Change Current Diretory so OA3Tool finds the files written in the Config File 
+&cd $PSScriptRoot
+#Delete old Files if exits
+if (Test-Path $PSScriptRoot\\OA3.xml) 
+{
+  Remove-Item $PSScriptRoot\\OA3.xml
 }
-catch {
-    Write-Warning "An error occurred: $($_.Exception.Message)"
-    Write-Warning "Could not retrieve DeviceHardwareData. This often indicates insufficient permissions or the WMI provider is not available/populated for the current user."
-    Write-Warning "You might need to use the 'Collect with Admin Rights' script or have an administrator run it."
+
+#Get SN from WMI
+$serial = (Get-WmiObject -Class Win32_BIOS).SerialNumber
+$SystemInfo = Get-CimInstance -Class Win32_ComputerSystem
+$Manufacturer = $SystemInfo.Manufacturer.Trim()
+$model = $SystemInfo.Model.Trim()
+
+#Run OA3Tool
+$hide = &$PSScriptRoot\\oa3tool.exe /Report /ConfigFile=$PSScriptRoot\\OA3.cfg /NoKeyCheck
+
+
+#Check if Hash was found
+If (Test-Path $PSScriptRoot\\OA3.xml) 
+{
+
+#Read Hash from generated XML File
+[xml]$xmlhash = Get-Content -Path "$PSScriptRoot\\OA3.xml"
+$hash = $xmlhash.Key.HardwareHash
+
+#Delete XML File
+del $PSScriptRoot\\OA3.xml
+
 }
+
+#################################################################################
+$hash
 `;
 
 
@@ -478,7 +473,7 @@ export default function AutopilotUploader() {
   const handleCopyNoAdminScript = useCallback(() => {
     navigator.clipboard.writeText(POWERSHELL_SCRIPT_NO_ADMIN)
       .then(() => {
-        toast({ title: "Non-Admin Script Copied!", description: "PowerShell script (no admin) copied to clipboard." });
+        toast({ title: "Non-Admin Script Copied!", description: "PowerShell script (no admin - OA3Tool) copied to clipboard." });
       })
       .catch(err => {
         toast({ variant: "destructive", title: "Copy Failed", description: "Could not copy non-admin script." });
@@ -752,31 +747,29 @@ export default function AutopilotUploader() {
       <CardHeader>
         <CardTitle className="font-headline text-lg flex items-center">
           <Info className="mr-2 h-5 w-5 text-primary" />
-          How to Collect Hardware Hash (Without Admin Rights - Experimental)
+          How to Collect Hardware Hash (No Admin - Requires OA3Tool)
         </CardTitle>
         <CardDescription>
-          This script attempts to collect the hardware hash without admin rights. Success may vary.
+          This script uses <code>oa3tool.exe</code> to collect the hardware hash without admin rights. Requires <code>oa3tool.exe</code> and <code>OA3.cfg</code>. Success may vary.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div>
           <Label className="font-semibold">Instructions:</Label>
           <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground mt-1">
-            <li>Open PowerShell (does not need to be as Administrator) on the target Windows device.</li>
-            <li>Copy the script below.</li>
-            <li>Paste the script into the PowerShell window and press Enter.</li>
-            <li>The script will attempt to:
-              <ul className="list-disc list-inside pl-4">
-                  <li>Query WMI for the 4K Hardware Hash.</li>
-                  <li>Save the hash to <code>YourUserProfile\Desktop\AutopilotHWID_NoAdmin.txt</code>.</li>
-              </ul>
-            </li>
-            <li>If successful, open the generated .txt file, copy the hash, and paste it into the uploader.</li>
-            <li>If it fails, you may need to use the admin script or consult with an administrator.</li>
+            <li><strong>Prerequisites:</strong> This script requires <code>oa3tool.exe</code> and a corresponding <code>OA3.cfg</code> file. These tools are typically part of the Windows ADK or OEM preinstallation kits. Ensure they are accessible.</li>
+            <li>Save the script below as a PowerShell file (e.g., <code>Get-HWID-NoAdmin.ps1</code>) in a directory on the target Windows device.</li>
+            <li>Place <code>oa3tool.exe</code> and <code>OA3.cfg</code> in the <strong>same directory</strong> as your saved <code>.ps1</code> script.</li>
+            <li>Open PowerShell (does not need to be as Administrator) on the target device.</li>
+            <li>Navigate to the directory where you saved the files: <code>cd C:\Path\To\Your\ScriptDirectory</code>.</li>
+            <li>Run the script: <code>.\Get-HWID-NoAdmin.ps1</code>.</li>
+            <li>If successful, the script will output the hardware hash directly to the PowerShell console.</li>
+            <li>Copy this hash from the console and paste it into the "Paste Hashes" tab in the uploader.</li>
+            <li><strong>Note:</strong> This method's success depends on the availability of <code>oa3tool.exe</code>, <code>OA3.cfg</code>, and system permissions. If it fails, you may need to use the admin script or consult with an administrator.</li>
           </ol>
         </div>
         <div>
-          <Label htmlFor="powershell-script-no-admin-display" className="font-semibold">PowerShell Script (No Admin):</Label>
+          <Label htmlFor="powershell-script-no-admin-display" className="font-semibold">PowerShell Script (No Admin - OA3Tool):</Label>
           <div className="mt-1 relative">
             <Textarea
               id="powershell-script-no-admin-display"
@@ -790,7 +783,7 @@ export default function AutopilotUploader() {
               size="icon"
               onClick={handleCopyNoAdminScript}
               className="absolute top-2 right-2 h-7 w-7"
-              title="Copy Non-Admin Script"
+              title="Copy Non-Admin Script (OA3Tool)"
             >
               <ClipboardCopy className="h-4 w-4" />
             </Button>
