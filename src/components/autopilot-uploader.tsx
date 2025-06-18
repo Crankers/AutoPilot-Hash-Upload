@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { AlertCircle, CheckCircle2, ClipboardPaste, FileText, Loader2, Sparkles, UploadCloud, XCircle, Tag, ClipboardCopy, Info, ExternalLink } from "lucide-react";
+import { AlertCircle, CheckCircle2, ClipboardPaste, FileText, Loader2, Sparkles, UploadCloud, XCircle, Tag, ClipboardCopy, Info, ExternalLink, DownloadCloud } from "lucide-react";
 import React, { useState, useCallback, DragEvent, ChangeEvent, useEffect } from "react";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -56,6 +56,38 @@ $env:Path += ";C:\\Program Files\\WindowsPowerShell\\Scripts"
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Unrestricted -Force
 Install-Script -Name Get-WindowsAutopilotInfo -Force -Confirm:$false
 Get-WindowsAutopilotInfo.ps1 -OutputFile AutopilotHWID.csv`;
+
+const POWERSHELL_SCRIPT_DOWNLOAD_AND_RUN_NO_ADMIN = `# Script to download and run Invoke-GetHardwareHashWithoutAdmin.ps1 from GitHub
+
+$scriptUrl = "https://raw.githubusercontent.com/Crankers/Invoke-GetHardwareHashWithoutAdmin/main/PowerShell/Invoke-GetHardwareHashWithoutAdmin.ps1"
+$tempPath = $env:TEMP
+$scriptName = "Invoke-GetHardwareHashWithoutAdmin.ps1"
+$localScriptPath = Join-Path -Path $tempPath -ChildPath $scriptName
+
+Write-Host "Attempting to download Invoke-GetHardwareHashWithoutAdmin.ps1..."
+try {
+    Invoke-WebRequest -Uri $scriptUrl -OutFile $localScriptPath -UseBasicParsing -ErrorAction Stop
+    Write-Host "Script downloaded to $localScriptPath"
+
+    # Optional: Unblock the script if execution policy requires it
+    # Unblock-File -Path $localScriptPath -ErrorAction SilentlyContinue
+
+    Write-Host "Attempting to execute the script (it may take a moment)..."
+    # Execute the script. It should output the hardware hash to the console.
+    & $localScriptPath
+    
+    Write-Host "Script execution finished. Check the console output above for the hardware hash."
+} catch {
+    Write-Error "Failed to download or execute the script: $($_.Exception.Message)"
+    Write-Error "If issues persist, you may need to manually download the script from the GitHub repository and run it."
+} finally {
+    # Optional: Clean up the downloaded script file after execution
+    # if (Test-Path $localScriptPath) {
+    #     Remove-Item $localScriptPath -Force -ErrorAction SilentlyContinue
+    #     Write-Host "Cleaned up downloaded script: $localScriptPath"
+    # }
+}
+`;
 
 
 export default function AutopilotUploader() {
@@ -432,6 +464,17 @@ export default function AutopilotUploader() {
       });
   }, [toast]);
 
+  const handleCopyDownloadAndRunNoAdminScript = useCallback(() => {
+    navigator.clipboard.writeText(POWERSHELL_SCRIPT_DOWNLOAD_AND_RUN_NO_ADMIN)
+      .then(() => {
+        toast({ title: "Script Copied!", description: "PowerShell script (download & run) copied to clipboard." });
+      })
+      .catch(err => {
+        toast({ variant: "destructive", title: "Copy Failed", description: "Could not copy script." });
+        console.error('Failed to copy download & run script: ', err);
+      });
+  }, [toast]);
+
   useEffect(() => {
   }, [stage, uploadProgress, validationIssues, confirmationDetails]);
 
@@ -696,31 +739,46 @@ export default function AutopilotUploader() {
     <Card className="shadow-md">
       <CardHeader>
         <CardTitle className="font-headline text-lg flex items-center">
-          <Info className="mr-2 h-5 w-5 text-primary" />
-          How to Collect Hardware Hash (No Admin - GitHub Script)
+          <DownloadCloud className="mr-2 h-5 w-5 text-primary" />
+          Collect Hardware Hash (No Admin - Automated Download & Run)
         </CardTitle>
         <CardDescription>
-          This method uses a PowerShell script from an external GitHub repository to attempt to collect the hardware hash without local admin rights.
+          This PowerShell script attempts to download and run the necessary script from GitHub to collect the hardware hash without local admin rights. The hash will be output to the console.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div>
           <Label className="font-semibold">Instructions:</Label>
           <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground mt-1">
-            <li>
-              Go to the GitHub repository: <a href="https://github.com/Crankers/Invoke-GetHardwareHashWithoutAdmin/tree/main/PowerShell" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center">
-                Crankers/Invoke-GetHardwareHashWithoutAdmin <ExternalLink className="ml-1 h-3 w-3" />
-              </a>
-            </li>
-            <li>Download the <code>Invoke-GetHardwareHashWithoutAdmin.ps1</code> script file to your target Windows device.</li>
-            <li>Open PowerShell (does not need to be as Administrator) on the target device.</li>
-            <li>Navigate to the directory where you saved the script. For example, if you saved it to Downloads: <code>cd $HOME\Downloads</code></li>
-            <li>Unblock the script file (if necessary): <code>Unblock-File -Path .\Invoke-GetHardwareHashWithoutAdmin.ps1</code></li>
-            <li>Run the script: <code>.\Invoke-GetHardwareHashWithoutAdmin.ps1</code></li>
-            <li>The script will output the hardware hash directly to the PowerShell console.</li>
-            <li>Copy this hash from the console and paste it into the "Paste Hashes" tab in the uploader.</li>
-            <li><strong>Note:</strong> This method's success may depend on system permissions and execution policies. If it fails, you may need to use the admin script or consult with an administrator.</li>
+            <li>Open PowerShell (does not need to be as Administrator) on the target Windows device.</li>
+            <li>Copy the script below.</li>
+            <li>Paste the script into the PowerShell window and press Enter.</li>
+            <li>The script will attempt to download <code>Invoke-GetHardwareHashWithoutAdmin.ps1</code> from GitHub to a temporary location and then execute it.</li>
+            <li>The hardware hash should be displayed in the PowerShell console upon successful execution.</li>
+            <li>Copy this hash from the console and paste it into the "Paste Hashes" tab in the uploader above.</li>
+            <li><strong>Note:</strong> This method's success may depend on internet connectivity, system permissions, and PowerShell execution policies. If it fails, you may need to use the admin script or consult with an administrator. The script might prompt for confirmation if your execution policy is restrictive.</li>
           </ol>
+        </div>
+         <div>
+          <Label htmlFor="powershell-script-no-admin-download" className="font-semibold">PowerShell Script (Download & Run):</Label>
+          <div className="mt-1 relative">
+            <Textarea
+              id="powershell-script-no-admin-download"
+              readOnly
+              value={POWERSHELL_SCRIPT_DOWNLOAD_AND_RUN_NO_ADMIN}
+              className="bg-muted/50 font-mono text-xs h-64 resize-none"
+              rows={10}
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleCopyDownloadAndRunNoAdminScript}
+              className="absolute top-2 right-2 h-7 w-7"
+              title="Copy Download & Run Script"
+            >
+              <ClipboardCopy className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
