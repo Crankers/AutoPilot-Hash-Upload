@@ -57,35 +57,101 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Unrestricted -Force
 Install-Script -Name Get-WindowsAutopilotInfo -Force -Confirm:$false
 Get-WindowsAutopilotInfo.ps1 -OutputFile AutopilotHWID.csv`;
 
-const POWERSHELL_SCRIPT_DOWNLOAD_AND_RUN_NO_ADMIN = `# Script to download and run Invoke-GetHardwareHashWithoutAdmin.ps1 from GitHub
+const POWERSHELL_SCRIPT_DOWNLOAD_AND_RUN_NO_ADMIN = `# Script to download the Crankers/Invoke-GetHardwareHashWithoutAdmin repository, unzip it, and run the script.
 
-$scriptUrl = "https://raw.githubusercontent.com/Crankers/Invoke-GetHardwareHashWithoutAdmin/main/PowerShell/Invoke-GetHardwareHashWithoutAdmin.ps1"
-$tempPath = $env:TEMP
-$scriptName = "Invoke-GetHardwareHashWithoutAdmin.ps1"
-$localScriptPath = Join-Path -Path $tempPath -ChildPath $scriptName
+\$repoOwner = "Crankers"
+\$repoName = "Invoke-GetHardwareHashWithoutAdmin"
+\$branch = "main"
+\$zipFileName = "\${repoName}-\${branch}.zip"
+\$extractedFolderName = "\${repoName}-\${branch}"
+\$scriptSubPath = "PowerShell" # The subfolder within the repo containing the script and its dependencies
 
-Write-Host "Attempting to download Invoke-GetHardwareHashWithoutAdmin.ps1..."
+\$tempPath = \$env:TEMP
+\$localZipPath = Join-Path -Path \$tempPath -ChildPath \$zipFileName
+\$extractionBase = Join-Path -Path \$tempPath # Expand-Archive extracts to a folder named by zip inside this path
+\$extractedRepoPath = Join-Path -Path \$extractionBase -ChildPath \$extractedFolderName 
+\$scriptExecutionDir = Join-Path -Path \$extractedRepoPath -ChildPath \$scriptSubPath
+\$scriptToRun = Join-Path -Path \$scriptExecutionDir -ChildPath "Invoke-GetHardwareHashWithoutAdmin.ps1"
+
+Write-Host "Starting process to get hardware hash..."
+Write-Host "Temporary path for downloads/extraction: \$tempPath"
+
+# Cleanup previous attempts if they exist
+if (Test-Path \$localZipPath) {
+    Write-Host "Removing old zip file: \$localZipPath"
+    Remove-Item \$localZipPath -Force -ErrorAction SilentlyContinue
+}
+if (Test-Path \$extractedRepoPath) {
+    Write-Host "Removing old extracted folder: \$extractedRepoPath"
+    Remove-Item \$extractedRepoPath -Recurse -Force -ErrorAction SilentlyContinue
+}
+
+\$repoZipUrl = "https://github.com/\${repoOwner}/\${repoName}/archive/refs/heads/\${branch}.zip"
+
+Write-Host "Attempting to download repository ZIP from \$repoZipUrl..."
 try {
-    Invoke-WebRequest -Uri $scriptUrl -OutFile $localScriptPath -UseBasicParsing -ErrorAction Stop
-    Write-Host "Script downloaded to $localScriptPath"
+    Invoke-WebRequest -Uri \$repoZipUrl -OutFile \$localZipPath -UseBasicParsing -ErrorAction Stop
+    Write-Host "Repository ZIP downloaded to \$localZipPath"
+} catch {
+    Write-Error "Failed to download repository ZIP: \$(\$_.Exception.Message)"
+    Write-Error "Please ensure you have an internet connection and the URL is accessible."
+    Write-Error "URL: \$repoZipUrl"
+    exit 1
+}
 
-    # Optional: Unblock the script if execution policy requires it
-    # Unblock-File -Path $localScriptPath -ErrorAction SilentlyContinue
+Write-Host "Attempting to extract \$localZipPath to \$extractionBase..."
+try {
+    Expand-Archive -Path \$localZipPath -DestinationPath \$extractionBase -Force -ErrorAction Stop
+    Write-Host "Successfully extracted. Expected repository folder: \$extractedRepoPath"
+} catch {
+    Write-Error "Failed to extract repository ZIP: \$(\$_.Exception.Message)"
+    Write-Error "Ensure PowerShell version is 5.0 or higher for Expand-Archive, or that you have permissions to write to \$tempPath."
+    if (Test-Path \$localZipPath) { Remove-Item \$localZipPath -Force -ErrorAction SilentlyContinue }
+    exit 1
+}
 
-    Write-Host "Attempting to execute the script (it may take a moment)..."
+if (-not (Test-Path \$scriptToRun)) {
+    Write-Error "Script Invoke-GetHardwareHashWithoutAdmin.ps1 not found at expected location: \$scriptToRun"
+    Write-Error "The repository structure might have changed, or the extraction was not as expected."
+    if (Test-Path \$localZipPath) { Remove-Item \$localZipPath -Force -ErrorAction SilentlyContinue }
+    if (Test-Path \$extractedRepoPath) { Remove-Item \$extractedRepoPath -Recurse -Force -ErrorAction SilentlyContinue }
+    exit 1
+}
+
+Write-Host "Changing location to \$scriptExecutionDir"
+try {
+    Set-Location -Path \$scriptExecutionDir -ErrorAction Stop
+    Write-Host "Successfully changed location. Current directory: \$(Get-Location)"
+} catch {
+    Write-Error "Failed to change directory to \$scriptExecutionDir: \$(\$_.Exception.Message)"
+    if (Test-Path \$localZipPath) { Remove-Item \$localZipPath -Force -ErrorAction SilentlyContinue }
+    if (Test-Path \$extractedRepoPath) { Remove-Item \$extractedRepoPath -Recurse -Force -ErrorAction SilentlyContinue }
+    exit 1
+}
+
+Write-Host "Attempting to execute \$(\$scriptToRun) (it may take a moment)..."
+Write-Host "This script relies on oa3tool.exe and OA3.cfg being in the same directory (\$scriptExecutionDir)."
+try {
     # Execute the script. It should output the hardware hash to the console.
-    & $localScriptPath
-    
+    & .\\Invoke-GetHardwareHashWithoutAdmin.ps1
     Write-Host "Script execution finished. Check the console output above for the hardware hash."
 } catch {
-    Write-Error "Failed to download or execute the script: $($_.Exception.Message)"
-    Write-Error "If issues persist, you may need to manually download the script from the GitHub repository and run it."
+    Write-Error "Failed to execute the script Invoke-GetHardwareHashWithoutAdmin.ps1: \$(\$_.Exception.Message)"
+    Write-Error "Ensure any execution policy restrictions are handled (e.g., Set-ExecutionPolicy RemoteSigned -Scope Process -Force, or unblock the .ps1 file manually if needed)."
 } finally {
-    # Optional: Clean up the downloaded script file after execution
-    # if (Test-Path $localScriptPath) {
-    #     Remove-Item $localScriptPath -Force -ErrorAction SilentlyContinue
-    #     Write-Host "Cleaned up downloaded script: $localScriptPath"
-    # }
+    Write-Host "Navigating back to original temp path for cleanup: \$tempPath"
+    Set-Location \$tempPath -ErrorAction SilentlyContinue
+    
+    Write-Host "Cleaning up downloaded and extracted files..."
+    if (Test-Path \$localZipPath) {
+        Write-Host "Removing zip file: \$localZipPath"
+        Remove-Item \$localZipPath -Force -ErrorAction SilentlyContinue
+    }
+    if (Test-Path \$extractedRepoPath) {
+        Write-Host "Removing extracted folder: \$extractedRepoPath"
+        Remove-Item \$extractedRepoPath -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    Write-Host "Cleanup attempt complete. If errors occurred during cleanup, you may need to manually remove files from \$tempPath."
 }
 `;
 
@@ -467,7 +533,7 @@ export default function AutopilotUploader() {
   const handleCopyDownloadAndRunNoAdminScript = useCallback(() => {
     navigator.clipboard.writeText(POWERSHELL_SCRIPT_DOWNLOAD_AND_RUN_NO_ADMIN)
       .then(() => {
-        toast({ title: "Script Copied!", description: "PowerShell script (download & run) copied to clipboard." });
+        toast({ title: "Script Copied!", description: "PowerShell script (download & run repo) copied to clipboard." });
       })
       .catch(err => {
         toast({ variant: "destructive", title: "Copy Failed", description: "Could not copy script." });
@@ -740,10 +806,10 @@ export default function AutopilotUploader() {
       <CardHeader>
         <CardTitle className="font-headline text-lg flex items-center">
           <DownloadCloud className="mr-2 h-5 w-5 text-primary" />
-          Collect Hardware Hash (No Admin - Automated Download & Run)
+          Collect Hardware Hash (No Admin - Download & Run Full Repo)
         </CardTitle>
         <CardDescription>
-          This PowerShell script attempts to download and run <code>Invoke-GetHardwareHashWithoutAdmin.ps1</code> from GitHub to collect the hardware hash. The hash will be output to the console.
+          This PowerShell script attempts to download the entire <code>Invoke-GetHardwareHashWithoutAdmin</code> GitHub repository, extract it, and then run the script from the <code>PowerShell</code> subfolder. This ensures that if <code>oa3tool.exe</code> and <code>OA3.cfg</code> are included in the repository's <code>PowerShell</code> folder, they will be available to the script.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -753,49 +819,42 @@ export default function AutopilotUploader() {
             <li>Open PowerShell (does not need to be as Administrator) on the target Windows device.</li>
             <li>Copy the script below.</li>
             <li>Paste the script into the PowerShell window and press Enter.</li>
-            <li>The script will attempt to download <code>Invoke-GetHardwareHashWithoutAdmin.ps1</code> from GitHub to a temporary location (e.g., <code>$env:TEMP</code>) and then execute it.</li>
-            <li>The hardware hash should be displayed in the PowerShell console upon successful execution.</li>
-            <li>
-                <strong>Important Dependencies:</strong> The <code>Invoke-GetHardwareHashWithoutAdmin.ps1</code> script from the linked GitHub repository
-                requires <code>oa3tool.exe</code> (and potentially an <code>OA3.cfg</code> file) to be present in the
-                same directory from which it is executed. When using this automated download script, this means <code>oa3tool.exe</code>
-                would need to be in the temporary directory (e.g., <code>C:\Users\YourUser\AppData\Local\Temp</code>).
-                If <code>oa3tool.exe</code> is not found there, the script will fail (as you might have observed with an error like "oa3tool.exe not recognized").
+            <li>The script will:
+                <ul className="list-disc list-inside pl-4 mt-1 space-y-1">
+                    <li>Download the <a href="https://github.com/Crankers/Invoke-GetHardwareHashWithoutAdmin" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Crankers/Invoke-GetHardwareHashWithoutAdmin</a> repository as a ZIP file to your temporary directory.</li>
+                    <li>Extract the ZIP file.</li>
+                    <li>Navigate into the extracted <code>PowerShell</code> subfolder.</li>
+                    <li>Attempt to execute <code>Invoke-GetHardwareHashWithoutAdmin.ps1</code>.</li>
+                </ul>
             </li>
+            <li>The hardware hash should be displayed in the PowerShell console upon successful execution.</li>
+            <li>The script will also attempt to clean up the downloaded ZIP file and the extracted folder from your temporary directory after execution.</li>
             <li>
                 <strong>Troubleshooting:</strong>
                 <ul className="list-disc list-inside pl-4 mt-1 space-y-1">
-                    <li>If the script fails to download (e.g., a 404 Not Found error), check your internet connection or network restrictions.</li>
-                    <li>
-                        If the script downloads but then fails because <code>oa3tool.exe</code> is not found, you will need to ensure <code>oa3tool.exe</code> is available.
-                        A more reliable approach might be to manually download <code>Invoke-GetHardwareHashWithoutAdmin.ps1</code> from the
-                        <a href="https://github.com/Crankers/Invoke-GetHardwareHashWithoutAdmin/tree/main/PowerShell" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline ml-1">
-                        GitHub repository <ExternalLink className="inline-block h-3 w-3 ml-0.5" />
-                        </a>,
-                        place it in a folder alongside <code>oa3tool.exe</code> (and <code>OA3.cfg</code> if needed by that script), and then run <code>Invoke-GetHardwareHashWithoutAdmin.ps1</code> manually from that folder.
-                        <code>oa3tool.exe</code> is typically part of the Windows Assessment and Deployment Kit (ADK).
-                    </li>
-                    <li>PowerShell execution policies might also prevent script execution. You may need to adjust them (e.g., <code>Set-ExecutionPolicy RemoteSigned -Scope Process -Force</code>) or unblock the downloaded <code>.ps1</code> file.</li>
+                    <li>If the script fails (e.g., because <code>oa3tool.exe</code> is still not found within the repository's <code>PowerShell</code> folder, or due to network/permission issues), you may need to manually ensure <code>oa3tool.exe</code> (typically part of the Windows Assessment and Deployment Kit - ADK) is available where the script expects it.</li>
+                    <li>PowerShell execution policies might also prevent script execution. You may need to adjust them (e.g., <code>Set-ExecutionPolicy RemoteSigned -Scope Process -Force</code>) or unblock the downloaded <code>.ps1</code> file if it's still present in the temp folder after a failed run.</li>
+                    <li>Ensure your PowerShell version is 5.0 or higher for <code>Expand-Archive</code> to work correctly.</li>
                 </ul>
             </li>
           </ol>
         </div>
          <div>
-          <Label htmlFor="powershell-script-no-admin-download" className="font-semibold">PowerShell Script (Automated Download & Run):</Label>
+          <Label htmlFor="powershell-script-no-admin-download-repo" className="font-semibold">PowerShell Script (Download & Run Full Repo):</Label>
           <div className="mt-1 relative">
             <Textarea
-              id="powershell-script-no-admin-download"
+              id="powershell-script-no-admin-download-repo"
               readOnly
               value={POWERSHELL_SCRIPT_DOWNLOAD_AND_RUN_NO_ADMIN}
               className="bg-muted/50 font-mono text-xs h-64 resize-none"
-              rows={10}
+              rows={15}
             />
             <Button
               variant="ghost"
               size="icon"
               onClick={handleCopyDownloadAndRunNoAdminScript}
               className="absolute top-2 right-2 h-7 w-7"
-              title="Copy Download & Run Script"
+              title="Copy Download & Run Repo Script"
             >
               <ClipboardCopy className="h-4 w-4" />
             </Button>
@@ -843,3 +902,6 @@ export default function AutopilotUploader() {
     
 
 
+
+
+    
