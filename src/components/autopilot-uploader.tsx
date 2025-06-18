@@ -68,7 +68,7 @@ const POWERSHELL_SCRIPT_DOWNLOAD_AND_RUN_NO_ADMIN = `# Script to download the Cr
 
 \$tempPath = \$env:TEMP
 \$localZipPath = Join-Path -Path \$tempPath -ChildPath \$zipFileName
-\$extractionBase = Join-Path -Path \$tempPath # Expand-Archive extracts to a folder named by zip inside this path
+\$extractionBase = \$tempPath 
 \$extractedRepoPath = Join-Path -Path \$extractionBase -ChildPath \$extractedFolderName 
 \$scriptExecutionDir = Join-Path -Path \$extractedRepoPath -ChildPath \$scriptSubPath
 \$scriptToRun = Join-Path -Path \$scriptExecutionDir -ChildPath "Invoke-GetHardwareHashWithoutAdmin.ps1"
@@ -847,7 +847,6 @@ export default function AutopilotUploader() {
               readOnly
               value={POWERSHELL_SCRIPT_DOWNLOAD_AND_RUN_NO_ADMIN}
               className="bg-muted/50 font-mono text-xs h-64 resize-none"
-              rows={15}
             />
             <Button
               variant="ghost"
@@ -905,4 +904,5 @@ export default function AutopilotUploader() {
 
 
     
+
 
