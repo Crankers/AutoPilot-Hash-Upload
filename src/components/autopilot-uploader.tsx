@@ -1,3 +1,4 @@
+
 "use client";
 
 import { suggestRemediation } from "@/ai/flows/suggest-remediation";
@@ -11,9 +12,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { AlertCircle, CheckCircle2, ClipboardPaste, FileText, Loader2, Sparkles, UploadCloud, XCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, ClipboardPaste, FileText, Loader2, Sparkles, UploadCloud, XCircle, Tag } from "lucide-react";
 import React, { useState, useCallback, DragEvent, ChangeEvent, useEffect } from "react";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 
 type UploadStage = 'idle' | 'uploading' | 'validationFailed' | 'success';
 interface ValidationIssue {
@@ -26,6 +29,8 @@ const MAX_HASHES = 1000;
 const MAX_FILE_SIZE_MB = 5;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
+const exampleGroupTags = ["FinanceDept", "ITSupport", "SalesTeam", "HRDepartment", "Engineering"];
+
 export default function AutopilotUploader() {
   const [stage, setStage] = useState<UploadStage>('idle');
   const [rawHashes, setRawHashes] = useState<string[]>([]);
@@ -33,11 +38,12 @@ export default function AutopilotUploader() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [pastedText, setPastedText] = useState('');
   const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [selectedGroupTag, setSelectedGroupTag] = useState<string>("");
 
   const [validationIssues, setValidationIssues] = useState<ValidationIssue[]>([]);
   const [overallValidationMessage, setOverallValidationMessage] = useState('');
 
-  const [confirmationDetails, setConfirmationDetails] = useState<{ count: number; timestamp: string } | null>(null);
+  const [confirmationDetails, setConfirmationDetails] = useState<{ count: number; timestamp: string; groupTag: string; } | null>(null);
 
   const [aiSuggestions, setAiSuggestions] = useState<string | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -57,6 +63,7 @@ export default function AutopilotUploader() {
     setAiSuggestions(null);
     setIsAiLoading(false);
     setShowAiDialog(false);
+    setSelectedGroupTag("");
   }, []);
 
   const parseHashes = (content: string): string[] => {
@@ -76,13 +83,10 @@ export default function AutopilotUploader() {
       issues.push({ type: 'max_count_exceeded', message: `Exceeded maximum of ${MAX_HASHES} hashes. Found ${hashes.length}.` });
     }
 
-    // Simulate duplicate detection (rudimentary)
     const seen = new Set<string>();
     const duplicates: string[] = [];
     hashes.forEach(hash => {
-      // Simulate invalid format (e.g. too short, or specific pattern if known)
-      if (hash.length < 10 && !hash.startsWith("VALID-")) { // Example: invalid if less than 10 chars and not starting with VALID-
-         // Allow known test hashes to pass this check
+      if (hash.length < 10 && !hash.startsWith("VALID-")) { 
         if(hash !== "duplicate_hash_example" && hash !== "another_duplicate" && hash !== "invalid_hash_example") {
           issues.push({ type: 'invalid_format', message: `Hash "${hash}" has an invalid format.`, count: (issues.find(i => i.type === 'invalid_format')?.count || 0) + 1 });
         }
@@ -96,7 +100,6 @@ export default function AutopilotUploader() {
       }
     });
     
-    // Test cases
     if (hashes.includes("duplicate_hash_example") && hashes.filter(h => h === "duplicate_hash_example").length > 1) {
       if (!duplicates.includes("duplicate_hash_example")) duplicates.push("duplicate_hash_example");
     }
@@ -116,11 +119,18 @@ export default function AutopilotUploader() {
   };
 
   const processInput = useCallback(async (parsedInputHashes: string[]) => {
+    if (!selectedGroupTag) {
+        toast({
+            variant: "destructive",
+            title: "Group Tag Required",
+            description: "Please select a Group Tag before processing.",
+        });
+        return;
+    }
     setRawHashes(parsedInputHashes);
     setStage('uploading');
     setUploadProgress(0);
 
-    // Simulate upload
     for (let i = 0; i <= 100; i += 10) {
       await new Promise(resolve => setTimeout(resolve, 50));
       setUploadProgress(i);
@@ -138,10 +148,11 @@ export default function AutopilotUploader() {
       setConfirmationDetails({
         count: parsedInputHashes.length,
         timestamp: new Date().toLocaleString(),
+        groupTag: selectedGroupTag,
       });
       setStage('success');
     }
-  }, []);
+  }, [selectedGroupTag, toast]);
 
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -220,7 +231,6 @@ export default function AutopilotUploader() {
   };
   
   useEffect(() => {
-    // Simulate progress bar filling up faster if validation is quick
     if (stage === 'uploading' && uploadProgress === 100 && (validationIssues.length > 0 || confirmationDetails)) {
         // Validation logic has already run and updated the stage if needed
     }
@@ -231,58 +241,77 @@ export default function AutopilotUploader() {
     <Card className="shadow-lg">
       <CardHeader>
         <CardTitle className="font-headline">Upload Device Hashes</CardTitle>
-        <CardDescription>Choose a method to upload your Autopilot device hashes.</CardDescription>
+        <CardDescription>Choose a method to upload your Autopilot device hashes and select a group tag.</CardDescription>
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="file" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 bg-muted p-1 h-auto">
-            <TabsTrigger value="file" className="py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm"><UploadCloud className="mr-2 h-5 w-5" />Upload File</TabsTrigger>
-            <TabsTrigger value="paste" className="py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm"><ClipboardPaste className="mr-2 h-5 w-5" />Paste Hashes</TabsTrigger>
-          </TabsList>
-          <TabsContent value="file" className="mt-6">
-            <div
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              className={cn(
-                "flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer transition-colors",
-                isDraggingOver ? "border-primary bg-primary/10" : "border-border hover:border-primary/50 hover:bg-accent/10"
-              )}
-            >
-              <UploadCloud className={cn("w-12 h-12 mb-4", isDraggingOver ? "text-primary" : "text-muted-foreground")} />
-              <p className={cn("mb-2 text-sm", isDraggingOver ? "text-primary" : "text-muted-foreground")}>
-                <span className="font-semibold">Click to upload</span> or drag and drop
-              </p>
-              <p className="text-xs text-muted-foreground">TXT or CSV files (Max {MAX_FILE_SIZE_MB}MB)</p>
-              <Input
-                id="file-upload"
-                type="file"
-                className="hidden"
-                accept=".txt,.csv"
-                onChange={handleFileChange}
-              />
-              <Button variant="link" size="sm" className="mt-2" onClick={() => document.getElementById('file-upload')?.click()}>
-                Browse files
-              </Button>
+        <div className="space-y-6">
+            <div>
+                <Label htmlFor="group-tag-select" className="text-base font-medium">Group Tag</Label>
+                <Select value={selectedGroupTag} onValueChange={setSelectedGroupTag}>
+                    <SelectTrigger id="group-tag-select" className="w-full mt-1">
+                        <SelectValue placeholder="Select a group tag..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {exampleGroupTags.map(tag => (
+                            <SelectItem key={tag} value={tag}>{tag}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+                {!selectedGroupTag && <p className="text-sm text-destructive mt-1">Please select a group tag.</p>}
             </div>
-          </TabsContent>
-          <TabsContent value="paste" className="mt-6">
-            <div className="space-y-4">
-              <Label htmlFor="paste-area" className="text-base">Paste your hashes here (one per line):</Label>
-              <Textarea
-                id="paste-area"
-                value={pastedText}
-                onChange={(e) => setPastedText(e.target.value)}
-                placeholder="Enter device hashes, one per line..."
-                rows={10}
-                className="text-sm"
-              />
-              <Button onClick={handleProcessPasted} disabled={!pastedText.trim()} className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
-                <Sparkles className="mr-2 h-4 w-4" /> Process Pasted Hashes
-              </Button>
-            </div>
-          </TabsContent>
-        </Tabs>
+
+            <Tabs defaultValue="file" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 bg-muted p-1 h-auto">
+                <TabsTrigger value="file" className="py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm"><UploadCloud className="mr-2 h-5 w-5" />Upload File</TabsTrigger>
+                <TabsTrigger value="paste" className="py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm"><ClipboardPaste className="mr-2 h-5 w-5" />Paste Hashes</TabsTrigger>
+            </TabsList>
+            <TabsContent value="file" className="mt-6">
+                <div
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                className={cn(
+                    "flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer transition-colors",
+                    isDraggingOver ? "border-primary bg-primary/10" : "border-border hover:border-primary/50 hover:bg-accent/10"
+                )}
+                >
+                <UploadCloud className={cn("w-12 h-12 mb-4", isDraggingOver ? "text-primary" : "text-muted-foreground")} />
+                <p className={cn("mb-2 text-sm", isDraggingOver ? "text-primary" : "text-muted-foreground")}>
+                    <span className="font-semibold">Click to upload</span> or drag and drop
+                </p>
+                <p className="text-xs text-muted-foreground">TXT or CSV files (Max {MAX_FILE_SIZE_MB}MB)</p>
+                <Input
+                    id="file-upload"
+                    type="file"
+                    className="hidden"
+                    accept=".txt,.csv"
+                    onChange={handleFileChange}
+                    disabled={!selectedGroupTag}
+                />
+                <Button variant="link" size="sm" className="mt-2" onClick={() => document.getElementById('file-upload')?.click()} disabled={!selectedGroupTag}>
+                    Browse files
+                </Button>
+                </div>
+            </TabsContent>
+            <TabsContent value="paste" className="mt-6">
+                <div className="space-y-4">
+                <Label htmlFor="paste-area" className="text-base">Paste your hashes here (one per line):</Label>
+                <Textarea
+                    id="paste-area"
+                    value={pastedText}
+                    onChange={(e) => setPastedText(e.target.value)}
+                    placeholder="Enter device hashes, one per line..."
+                    rows={10}
+                    className="text-sm"
+                    disabled={!selectedGroupTag}
+                />
+                <Button onClick={handleProcessPasted} disabled={!pastedText.trim() || !selectedGroupTag} className="w-full sm:w-auto bg-accent hover:bg-accent/90 text-accent-foreground">
+                    <Sparkles className="mr-2 h-4 w-4" /> Process Pasted Hashes
+                </Button>
+                </div>
+            </TabsContent>
+            </Tabs>
+        </div>
       </CardContent>
     </Card>
   );
@@ -295,6 +324,7 @@ export default function AutopilotUploader() {
           Processing Hashes
         </CardTitle>
         {fileName && <CardDescription>File: {fileName}</CardDescription>}
+        {selectedGroupTag && <CardDescription>Group Tag: {selectedGroupTag}</CardDescription>}
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">Your hashes are being uploaded and validated. Please wait...</p>
@@ -312,6 +342,7 @@ export default function AutopilotUploader() {
           Validation Failed
         </CardTitle>
         {fileName && <CardDescription>File: {fileName}</CardDescription>}
+        {selectedGroupTag && <CardDescription>Group Tag: {selectedGroupTag}</CardDescription>}
       </CardHeader>
       <CardContent className="space-y-4">
         <Alert variant="destructive">
@@ -357,6 +388,7 @@ export default function AutopilotUploader() {
         {confirmationDetails && (
           <div className="p-4 border rounded-md bg-secondary/50">
             <p className="text-sm"><span className="font-semibold">Number of hashes processed:</span> {confirmationDetails.count}</p>
+            <p className="text-sm"><span className="font-semibold">Group Tag:</span> {confirmationDetails.groupTag}</p>
             <p className="text-sm"><span className="font-semibold">Timestamp:</span> {confirmationDetails.timestamp}</p>
             <p className="text-xs text-muted-foreground mt-2">Keep these details for your audit records.</p>
           </div>
@@ -378,6 +410,7 @@ export default function AutopilotUploader() {
         </CardHeader>
         <CardContent>
           <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
+            <li>A Group Tag must be selected before uploading or pasting hashes.</li>
             <li>Maximum file size: {MAX_FILE_SIZE_MB}MB.</li>
             <li>Maximum {MAX_HASHES} hashes per upload.</li>
             <li>Supported formats: .txt or .csv (ensure hashes are in the first column or one per line for .txt).</li>
@@ -424,3 +457,5 @@ export default function AutopilotUploader() {
     </div>
   );
 }
+
+    
