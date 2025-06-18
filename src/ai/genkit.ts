@@ -1,9 +1,11 @@
 import {genkit} from 'genkit';
-// import {googleAI} from '@genkit-ai/googleai'; // Removed googleAI plugin
 
+// Explicitly initialize Genkit without any AI plugins that require API keys
+// if no specific AI models are intended to be used by the flows.
 export const ai = genkit({
   plugins: [
-    // googleAI() // Removed googleAI plugin
+    // Add any non-AI related Genkit plugins here if needed in the future.
+    // For now, it's empty to avoid initializing AI services that require API keys.
   ],
-  // model: 'googleai/gemini-2.0-flash', // Model configuration removed as no default AI plugin
+  // No default model is configured if no AI plugin is active.
 });
