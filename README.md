@@ -65,7 +65,7 @@ This Next.js application is configured to produce a standalone output, suitable 
     *   `GRAPH_CLIENT_SECRET`: Your Azure AD App's Client Secret Value.
     *   `GRAPH_TENANT_ID`: Your Azure AD Tenant ID.
     *   `PORT`: (Optional, Azure usually sets this) Typically `8080`. Next.js standalone mode listens on the port specified by the `PORT` environment variable.
-    *   `NEXT_PUBLIC_AUTOPILOT_GROUP_TAGS`: (Optional) A JSON string to customize the Autopilot Group Tags dropdown. See "Customizing Group Tags" section below for format.
+    *   `NEXT_PUBLIC_GROUP_TAG_LIST`: (Optional) A JSON string to customize the Autopilot Group Tags dropdown. See "Customizing Group Tags" section below for format.
 
 3.  **Configure Startup Command:**
     In "Settings" -> "Configuration" -> "General settings", set the **Startup Command** to:
@@ -101,7 +101,7 @@ This Next.js application is configured to produce a standalone output, suitable 
 
 ### Customizing Group Tags
 The list of available Autopilot Group Tags in the dropdown can be customized via an environment variable.
-*   **Environment Variable Name:** `NEXT_PUBLIC_AUTOPILOT_GROUP_TAGS`
+*   **Environment Variable Name:** `NEXT_PUBLIC_GROUP_TAG_LIST`
 *   **Format:** A JSON string representing an array of objects, where each object has a `displayName` (string, for the UI) and a `backendTag` (string, the value sent to Intune).
 *   **Example:**
     ```json
@@ -111,5 +111,6 @@ The list of available Autopilot Group Tags in the dropdown can be customized via
       {"displayName": "Test Kiosks", "backendTag": "TEST_KIOSK"}
     ]
     ```
-    To use this example, you would set the `NEXT_PUBLIC_AUTOPILOT_GROUP_TAGS` environment variable to the above JSON string (ensure it's a single line or properly escaped if your environment requires it).
+    To use this example, you would set the `NEXT_PUBLIC_GROUP_TAG_LIST` environment variable to the above JSON string (ensure it's a single line or properly escaped if your environment requires it).
 *   If this environment variable is not set or is invalid JSON, the application will fall back to a default list of group tags.
+

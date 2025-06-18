@@ -156,7 +156,7 @@ export default function AutopilotUploader() {
   const { toast } = useToast();
 
   const groupTags = useMemo(() => {
-    const envTags = process.env.NEXT_PUBLIC_AUTOPILOT_GROUP_TAGS;
+    const envTags = process.env.NEXT_PUBLIC_GROUP_TAG_LIST;
     if (envTags) {
       try {
         const parsedTags = JSON.parse(envTags);
@@ -164,7 +164,7 @@ export default function AutopilotUploader() {
           return parsedTags as GroupTagOption[];
         }
       } catch (error) {
-        console.error("Failed to parse NEXT_PUBLIC_AUTOPILOT_GROUP_TAGS:", error);
+        console.error("Failed to parse NEXT_PUBLIC_GROUP_TAG_LIST:", error);
       }
     }
     return defaultGroupTags;
@@ -906,5 +906,6 @@ export default function AutopilotUploader() {
 
 
     
+
 
 
