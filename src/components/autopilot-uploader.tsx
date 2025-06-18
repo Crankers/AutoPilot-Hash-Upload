@@ -43,7 +43,7 @@ const POWERSHELL_SCRIPT = `New-Item -Type Directory -Path "C:\\HWID" -ErrorActio
 Set-Location -Path "C:\\HWID"
 $env:Path += ";C:\\Program Files\\WindowsPowerShell\\Scripts"
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Unrestricted -Force
-Install-Script -Name Get-WindowsAutopilotInfo -Force -Confirm:$false -AcceptLicense
+Install-Script -Name Get-WindowsAutopilotInfo -Force -Confirm:$false
 Get-WindowsAutopilotInfo.ps1 -OutputFile AutopilotHWID.csv`;
 
 export default function AutopilotUploader() {
@@ -88,7 +88,7 @@ export default function AutopilotUploader() {
       .filter(hash => hash.length > 0);
   };
 
-  const validateHashes = (hashes: string[]): ValidationIssue[] => {
+  const validateHashes = useCallback((hashes: string[]): ValidationIssue[] => {
     const issues: ValidationIssue[] = [];
     if (hashes.length === 0) {
       issues.push({ type: 'empty', message: 'No hashes found. Please provide some hashes.' });
@@ -101,9 +101,8 @@ export default function AutopilotUploader() {
     const seen = new Set<string>();
     const duplicates: string[] = [];
     hashes.forEach(hash => {
-      // More robust Base64-like check: allows A-Z, a-z, 0-9, +, /, and = (for padding)
       if (!/^[A-Za-z0-9+/]*=?=?$/.test(hash) || hash.length < 10) {
-        if(hash !== "duplicate_hash_example" && hash !== "another_duplicate" && hash !== "invalid_hash_example") {
+         if(hash !== "duplicate_hash_example" && hash !== "another_duplicate" && hash !== "invalid_hash_example") {
           issues.push({ type: 'invalid_format', message: `Hash "${hash.substring(0,30)}..." appears to have an invalid format or characters. Hashes should be Base64 encoded.`, count: (issues.find(i => i.type === 'invalid_format')?.count || 0) + 1 });
         }
       }
@@ -132,7 +131,16 @@ export default function AutopilotUploader() {
     }
     
     return issues;
-  };
+  }, []);
+
+  const handleFileUploadError = useCallback(() => {
+    const fileUploadInput = document.getElementById('file-upload') as HTMLInputElement | null;
+    if (fileUploadInput) {
+        fileUploadInput.value = ""; 
+    }
+    setFileName(null); 
+  }, [setFileName]);
+
 
   const processInput = useCallback(async (parsedInputHashes: string[]) => {
     if (!selectedGroupTag) {
@@ -147,7 +155,7 @@ export default function AutopilotUploader() {
     setRawHashes(parsedInputHashes);
     setStage('uploading');
     setUploadProgress(0);
-    setFileName(fileName || "Pasted Hashes");
+    // fileName is already set by file upload or pasted text handler
     setSubmissionStatusMessage('Validating local file and hashes...');
     setValidationIssues([]); 
 
@@ -192,10 +200,9 @@ export default function AutopilotUploader() {
            let errorMessage = result.message || (result as any).error || `Failed to submit to Intune. Status: ${response.status || 'Unknown'}`;
            if (typeof result.details === 'object' && result.details !== null && (result.details as any).error?.message) {
              errorMessage = `Failed to submit to Intune: ${(result.details as any).error.message}`;
-           } else if (typeof result.details === 'string' && result.details.length > 0 && result.details.length < 200) { // Check if details is a short string
+           } else if (typeof result.details === 'string' && result.details.length > 0 && result.details.length < 500) { 
              errorMessage = `Failed to submit to Intune. Details: ${result.details}`;
            }
-
 
            setOverallValidationMessage(`Intune Submission Failed: ${errorMessage}`);
            setValidationIssues(prev => [...prev, { type: 'intune_submission', message: errorMessage, details: result.details }]);
@@ -220,16 +227,8 @@ export default function AutopilotUploader() {
         });
       }
     }
-  }, [selectedGroupTag, toast, fileName, validateHashes, setRawHashes, setStage, setUploadProgress, setFileName, setSubmissionStatusMessage, setValidationIssues, setOverallValidationMessage, setConfirmationDetails]);
+  }, [selectedGroupTag, toast, validateHashes]);
 
-
-  const handleFileUploadError = useCallback(() => {
-    const fileUploadInput = document.getElementById('file-upload') as HTMLInputElement | null;
-    if (fileUploadInput) {
-        fileUploadInput.value = ""; 
-    }
-    setFileName(null); 
-  }, [setFileName]);
 
   const processFile = useCallback((file: File) => {
      const allowedExtensions = ['.txt', '.csv'];
@@ -285,7 +284,7 @@ export default function AutopilotUploader() {
         setStage('idle');
     };
     reader.readAsText(file);
-  }, [toast, handleFileUploadError, setFileName, processInput, setStage, parseHashes]);
+  }, [toast, handleFileUploadError, setFileName, processInput, parseHashes, setStage]);
 
   const handleFileChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
