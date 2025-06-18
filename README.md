@@ -107,8 +107,8 @@ The list of available Autopilot Group Tags in the dropdown can be customized via
     ```json
     [
       {"displayName": "Quanta Services", "backendTag": "QCO"},
-      {"displayName": "Nationwide Insurance", "backendTag": "NWI"}
-      {"displayName": "Honda Moters Corp", "backendTag": "HMC"}
+      {"displayName": "Nationwide Insurance", "backendTag": "NWI"},
+      {"displayName": "Honda Moters Corp", "backendTag": "HMC"},
       {"displayName": "Chase Bank Ohio", "backendTag": "CBO"}
     ]
     ```
