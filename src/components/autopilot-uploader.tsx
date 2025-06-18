@@ -68,7 +68,7 @@ const POWERSHELL_SCRIPT_DOWNLOAD_AND_RUN_NO_ADMIN = `# Script to download the Cr
 
 \$tempPath = \$env:TEMP
 \$localZipPath = Join-Path -Path \$tempPath -ChildPath \$zipFileName
-\$extractionBase = \$tempPath 
+\$extractionBase = Join-Path -Path \$tempPath -ChildPath "" # Expand-Archive extracts to a folder named by zip inside this path
 \$extractedRepoPath = Join-Path -Path \$extractionBase -ChildPath \$extractedFolderName 
 \$scriptExecutionDir = Join-Path -Path \$extractedRepoPath -ChildPath \$scriptSubPath
 \$scriptToRun = Join-Path -Path \$scriptExecutionDir -ChildPath "Invoke-GetHardwareHashWithoutAdmin.ps1"
@@ -131,28 +131,7 @@ try {
 
 Write-Host "Attempting to execute \$(\$scriptToRun) (it may take a moment)..."
 Write-Host "This script relies on oa3tool.exe and OA3.cfg being in the same directory (\$scriptExecutionDir)."
-try {
-    # Execute the script. It should output the hardware hash to the console.
-    & .\\Invoke-GetHardwareHashWithoutAdmin.ps1
-    Write-Host "Script execution finished. Check the console output above for the hardware hash."
-} catch {
-    Write-Error "Failed to execute the script Invoke-GetHardwareHashWithoutAdmin.ps1: \$(\$_.Exception.Message)"
-    Write-Error "Ensure any execution policy restrictions are handled (e.g., Set-ExecutionPolicy RemoteSigned -Scope Process -Force, or unblock the .ps1 file manually if needed)."
-} finally {
-    Write-Host "Navigating back to original temp path for cleanup: \$tempPath"
-    Set-Location \$tempPath -ErrorAction SilentlyContinue
-    
-    Write-Host "Cleaning up downloaded and extracted files..."
-    if (Test-Path \$localZipPath) {
-        Write-Host "Removing zip file: \$localZipPath"
-        Remove-Item \$localZipPath -Force -ErrorAction SilentlyContinue
-    }
-    if (Test-Path \$extractedRepoPath) {
-        Write-Host "Removing extracted folder: \$extractedRepoPath"
-        Remove-Item \$extractedRepoPath -Recurse -Force -ErrorAction SilentlyContinue
-    }
-    Write-Host "Cleanup attempt complete. If errors occurred during cleanup, you may need to manually remove files from \$tempPath."
-}
+& .\\Invoke-GetHardwareHashWithoutAdmin.ps1
 `;
 
 
@@ -906,3 +885,6 @@ export default function AutopilotUploader() {
     
 
 
+
+
+    
