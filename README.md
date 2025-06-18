@@ -116,5 +116,5 @@ The list of available Autopilot Group Tags in the dropdown can be customized via
 *   If this environment variable is not set or is invalid JSON, the application will fall back to a default list of group tags.
 *   NEXT_PUBLIC_GROUP_TAG_LIST='[{"displayName": "Quanta Services", "backendTag": "QCO"}, {"displayName": "Nationwide Insurance", "backendTag": "NWI"}, {"displayName": "Honda Moters Corp", "backendTag": "HMC"}, {"displayName": "Chase Bank Ohio", "backendTag": "CBO"}]'
 
-![Example Image](https://raw.githubusercontent.com/Crankers/AutoPilot-Hash-Upload/refs/heads/master/Example.png)
+![Example Image](https://github.com/Crankers/AutoPilot-Hash-Upload/blob/Dev/docs/Example.png?raw=true)
 
