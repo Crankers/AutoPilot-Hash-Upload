@@ -713,8 +713,6 @@ export default function AutopilotUploader() {
             <li>Maximum {MAX_HASHES} hashes per upload.</li>
             <li>Supported formats: .txt or .csv (ensure hashes are in the third column if a CSV header is present, or one per line for .txt).</li>
             <li>Each hash should be on a new line and be a valid Base64 string (typically the 4K HH).</li>
-            <li>The Intune upload requires proper Azure AD app registration and environment variables (GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET, GRAPH_TENANT_ID).</li>
-            <li>To update the available Group Tags, edit the `exampleGroupTags` array at the top of the `src/components/autopilot-uploader.tsx` file.</li>
           </ul>
         </CardContent>
       </Card>
