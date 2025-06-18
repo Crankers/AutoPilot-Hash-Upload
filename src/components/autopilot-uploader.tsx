@@ -48,6 +48,8 @@ const defaultGroupTags: GroupTagOption[] = [
   { displayName: "Shared Device", backendTag: "SHRD" },
   { displayName: "Executive User", backendTag: "EXEC" },
   { displayName: "Standard User", backendTag: "STDU" },
+  { displayName: "Quanta Services", backendTag: "QCO" },
+  { displayName: "Nationwide Insurance", backendTag: "NWI" },
 ];
 
 const POWERSHELL_SCRIPT_ADMIN = `New-Item -Type Directory -Path "C:\\HWID" -ErrorAction SilentlyContinue
@@ -743,59 +745,6 @@ export default function AutopilotUploader() {
     </Card>
   );
 
-  const renderCollectHashAdminUI = () => (
-    <Card className="shadow-md">
-      <CardHeader>
-        <CardTitle className="font-headline text-lg flex items-center">
-          <Info className="mr-2 h-5 w-5 text-primary" />
-          How to Collect Hardware Hash (Requires Admin Rights)
-        </CardTitle>
-        <CardDescription>
-          Follow these steps on the target Windows device to obtain its hardware hash for Autopilot.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div>
-          <Label className="font-semibold">Instructions:</Label>
-          <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground mt-1">
-            <li>Open PowerShell as an Administrator on the target Windows device.</li>
-            <li>Copy the script below.</li>
-            <li>Paste the script into the PowerShell window and press Enter.</li>
-            <li>The script will:
-              <ul className="list-disc list-inside pl-4">
-                  <li>Create a directory <code>C:\HWID</code> (if it doesn't exist).</li>
-                  <li>Download the necessary <code>Get-WindowsAutopilotInfo</code> script from PowerShell Gallery.</li>
-                  <li>Save the hardware hash to <code>C:\HWID\AutopilotHWID.csv</code>.</li>
-              </ul>
-            </li>
-            <li>You can then upload this <code>AutopilotHWID.csv</code> file using the uploader above, or copy its contents.</li>
-          </ol>
-        </div>
-        <div>
-          <Label htmlFor="powershell-script-admin-display" className="font-semibold">PowerShell Script (Admin):</Label>
-          <div className="mt-1 relative">
-            <Textarea
-              id="powershell-script-admin-display"
-              readOnly
-              value={POWERSHELL_SCRIPT_ADMIN}
-              className="bg-muted/50 font-mono text-xs h-48 resize-none"
-              rows={7}
-            />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleCopyAdminScript}
-              className="absolute top-2 right-2 h-7 w-7"
-              title="Copy Admin Script"
-            >
-              <ClipboardCopy className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-
   const renderCollectHashNoAdminUI = () => (
     <Card className="shadow-md">
       <CardHeader>
@@ -858,6 +807,59 @@ export default function AutopilotUploader() {
     </Card>
   );
 
+  const renderCollectHashAdminUI = () => (
+    <Card className="shadow-md">
+      <CardHeader>
+        <CardTitle className="font-headline text-lg flex items-center">
+          <Info className="mr-2 h-5 w-5 text-primary" />
+          How to Collect Hardware Hash (Requires Admin Rights)
+        </CardTitle>
+        <CardDescription>
+          Follow these steps on the target Windows device to obtain its hardware hash for Autopilot.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <Label className="font-semibold">Instructions:</Label>
+          <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground mt-1">
+            <li>Open PowerShell as an Administrator on the target Windows device.</li>
+            <li>Copy the script below.</li>
+            <li>Paste the script into the PowerShell window and press Enter.</li>
+            <li>The script will:
+              <ul className="list-disc list-inside pl-4">
+                  <li>Create a directory <code>C:\HWID</code> (if it doesn't exist).</li>
+                  <li>Download the necessary <code>Get-WindowsAutopilotInfo</code> script from PowerShell Gallery.</li>
+                  <li>Save the hardware hash to <code>C:\HWID\AutopilotHWID.csv</code>.</li>
+              </ul>
+            </li>
+            <li>You can then upload this <code>AutopilotHWID.csv</code> file using the uploader above, or copy its contents.</li>
+          </ol>
+        </div>
+        <div>
+          <Label htmlFor="powershell-script-admin-display" className="font-semibold">PowerShell Script (Admin):</Label>
+          <div className="mt-1 relative">
+            <Textarea
+              id="powershell-script-admin-display"
+              readOnly
+              value={POWERSHELL_SCRIPT_ADMIN}
+              className="bg-muted/50 font-mono text-xs h-48 resize-none"
+              rows={7}
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleCopyAdminScript}
+              className="absolute top-2 right-2 h-7 w-7"
+              title="Copy Admin Script"
+            >
+              <ClipboardCopy className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
 
   return (
     <div className="space-y-8 max-w-3xl mx-auto">
@@ -904,4 +906,5 @@ export default function AutopilotUploader() {
 
 
     
+
 
