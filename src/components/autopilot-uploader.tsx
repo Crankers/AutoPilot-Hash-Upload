@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { AlertCircle, CheckCircle2, ClipboardPaste, FileText, Loader2, Sparkles, UploadCloud, XCircle, Tag, ClipboardCopy, Info, ExternalLink, DownloadCloud } from "lucide-react";
-import React, { useState, useCallback, DragEvent, ChangeEvent, useEffect } from "react";
+import React, { useState, useCallback, DragEvent, ChangeEvent, useEffect, useMemo } from "react";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -42,7 +42,7 @@ const MAX_HASHES = 1000;
 const MAX_FILE_SIZE_MB = 5;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
-const exampleGroupTags: GroupTagOption[] = [
+const defaultGroupTags: GroupTagOption[] = [
   { displayName: "Corporate Standard", backendTag: "CORP" },
   { displayName: "Kiosk Device", backendTag: "KIOS" },
   { displayName: "Shared Device", backendTag: "SHRD" },
@@ -153,10 +153,26 @@ export default function AutopilotUploader() {
 
   const { toast } = useToast();
 
+  const groupTags = useMemo(() => {
+    const envTags = process.env.NEXT_PUBLIC_AUTOPILOT_GROUP_TAGS;
+    if (envTags) {
+      try {
+        const parsedTags = JSON.parse(envTags);
+        if (Array.isArray(parsedTags) && parsedTags.every(tag => typeof tag.displayName === 'string' && typeof tag.backendTag === 'string')) {
+          return parsedTags as GroupTagOption[];
+        }
+      } catch (error) {
+        console.error("Failed to parse NEXT_PUBLIC_AUTOPILOT_GROUP_TAGS:", error);
+      }
+    }
+    return defaultGroupTags;
+  }, []);
+
+
   const getSelectedGroupTagDisplayName = useCallback(() => {
-    const selectedOption = exampleGroupTags.find(opt => opt.backendTag === selectedBackendTag);
+    const selectedOption = groupTags.find(opt => opt.backendTag === selectedBackendTag);
     return selectedOption ? selectedOption.displayName : "N/A";
-  }, [selectedBackendTag]);
+  }, [selectedBackendTag, groupTags]);
 
   const resetState = useCallback(() => {
     setStage('idle');
@@ -542,7 +558,7 @@ export default function AutopilotUploader() {
                         <SelectValue placeholder="Select a group tag..." />
                     </SelectTrigger>
                     <SelectContent>
-                        {exampleGroupTags.map(tagOpt => (
+                        {groupTags.map(tagOpt => (
                             <SelectItem key={tagOpt.backendTag} value={tagOpt.backendTag}>{tagOpt.displayName}</SelectItem>
                         ))}
                     </SelectContent>
@@ -888,3 +904,4 @@ export default function AutopilotUploader() {
 
 
     
+

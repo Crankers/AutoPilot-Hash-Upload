@@ -65,6 +65,7 @@ This Next.js application is configured to produce a standalone output, suitable 
     *   `GRAPH_CLIENT_SECRET`: Your Azure AD App's Client Secret Value.
     *   `GRAPH_TENANT_ID`: Your Azure AD Tenant ID.
     *   `PORT`: (Optional, Azure usually sets this) Typically `8080`. Next.js standalone mode listens on the port specified by the `PORT` environment variable.
+    *   `NEXT_PUBLIC_AUTOPILOT_GROUP_TAGS`: (Optional) A JSON string to customize the Autopilot Group Tags dropdown. See "Customizing Group Tags" section below for format.
 
 3.  **Configure Startup Command:**
     In "Settings" -> "Configuration" -> "General settings", set the **Startup Command** to:
@@ -97,4 +98,18 @@ This Next.js application is configured to produce a standalone output, suitable 
 *   Supported formats: .txt or .csv (ensure hashes are in the third column if a CSV header is present, or one per line for .txt).
 *   Each hash should be on a new line and be a valid Base64 string (typically the 4K HH).
 *   The Intune upload requires proper Azure AD app registration and environment variables (GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET, GRAPH_TENANT_ID).
-*   To update the available Group Tags, edit the `exampleGroupTags` array at the top of the `src/components/autopilot-uploader.tsx` file.
+
+### Customizing Group Tags
+The list of available Autopilot Group Tags in the dropdown can be customized via an environment variable.
+*   **Environment Variable Name:** `NEXT_PUBLIC_AUTOPILOT_GROUP_TAGS`
+*   **Format:** A JSON string representing an array of objects, where each object has a `displayName` (string, for the UI) and a `backendTag` (string, the value sent to Intune).
+*   **Example:**
+    ```json
+    [
+      {"displayName": "Sales Department Devices", "backendTag": "SALES_DEPT"},
+      {"displayName": "Engineering Laptops", "backendTag": "ENG_LTP"},
+      {"displayName": "Test Kiosks", "backendTag": "TEST_KIOSK"}
+    ]
+    ```
+    To use this example, you would set the `NEXT_PUBLIC_AUTOPILOT_GROUP_TAGS` environment variable to the above JSON string (ensure it's a single line or properly escaped if your environment requires it).
+*   If this environment variable is not set or is invalid JSON, the application will fall back to a default list of group tags.
