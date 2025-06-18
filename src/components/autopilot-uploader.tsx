@@ -37,7 +37,7 @@ const MAX_HASHES = 1000;
 const MAX_FILE_SIZE_MB = 5;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
-const exampleGroupTags = ["FinanceDept", "ITSupport", "SalesTeam", "HRDepartment", "Engineering"];
+const exampleGroupTags = ["Corporate", "Kiosk", "SharedDevice", "Executive", "StandardUser"];
 
 const POWERSHELL_SCRIPT = `New-Item -Type Directory -Path "C:\\HWID" -ErrorAction SilentlyContinue
 Set-Location -Path "C:\\HWID"
@@ -92,39 +92,45 @@ export default function AutopilotUploader() {
     }
 
     const outputHashes: string[] = [];
+    let firstNonEmptyLine = "";
+    for (const line of lines) {
+        if (line) {
+            firstNonEmptyLine = line;
+            break;
+        }
+    }
+    const firstLineLower = firstNonEmptyLine.toLowerCase();
 
-    const firstLineLower = lines[0].toLowerCase();
-    // Check if the first non-empty line looks like a header from Get-WindowsAutopilotInfo.ps1
-    const isAutopilotCsv = 
+    const isAutopilotCsv =
         (firstLineLower.includes('device serial number') || firstLineLower.includes('serialnumber')) &&
         (firstLineLower.includes('hardware hash') || firstLineLower.includes('hardwarehash')) &&
-        lines[0].includes(','); // Ensure it's actually comma-separated
+        firstLineLower.includes(',');
 
     if (isAutopilotCsv) {
-      // Start from the second line (index 1) to skip the header
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i];
-        const columns = line.split(','); // Simple split, assumes hashes don't contain commas
+      let headerSkipped = false;
+      for (const line of lines) {
+        if (!headerSkipped && line.toLowerCase() === firstLineLower) {
+            headerSkipped = true;
+            continue;
+        }
+        if (!headerSkipped) continue; // Skip any lines before the identified header
+
+        const columns = line.split(',');
         if (columns.length >= 3) {
-          let hash = columns[2].trim(); // Hardware Hash is the 3rd column (index 2)
-          // Remove surrounding quotes, if any
+          let hash = columns[2].trim();
           if (hash.startsWith('"') && hash.endsWith('"')) {
             hash = hash.substring(1, hash.length - 1);
           }
-          if (hash.length > 0) { // Ensure we have a non-empty hash
+          if (hash.length > 0) {
             outputHashes.push(hash);
           }
         }
       }
     } else {
-      // Not a recognized Autopilot CSV.
-      // Treat each line as a potential hash candidate IF it does not contain commas.
-      // This is for plain text lists of hashes.
       for (const line of lines) {
         if (!line.includes(',')) {
             outputHashes.push(line);
         }
-        // Lines with commas that are not part of a recognized Autopilot CSV are skipped.
       }
     }
     return outputHashes;
@@ -146,7 +152,7 @@ export default function AutopilotUploader() {
     hashes.forEach(hash => {
       // Base64 regex: allows A-Z, a-z, 0-9, +, /, and = (typically at the end for padding)
       // A typical 4K HH is very long, so length < 10 is a safe bet for an invalid short string.
-      if (!/^[A-Za-z0-9+/]*=?=?$/.test(hash) || hash.length < 10) {
+      if (!/^[A-Za-z0-9+/=]+$/.test(hash) || hash.length < 10) {
          // These specific strings are used for testing the duplicate/invalid logic, don't flag them here as invalid format.
          if(hash !== "duplicate_hash_example" && hash !== "another_duplicate" && hash !== "invalid_hash_example") {
           issues.push({ type: 'invalid_format', message: `Hash "${hash.substring(0,30)}..." appears to have an invalid format or characters. Hashes should be Base64 encoded.`, count: (issues.find(i => i.type === 'invalid_format')?.count || 0) + 1 });
@@ -272,7 +278,7 @@ export default function AutopilotUploader() {
         });
       }
     }
-  }, [selectedGroupTag, toast, validateHashes, parseHashes]);
+  }, [selectedGroupTag, toast, validateHashes]);
 
 
   const processFile = useCallback((file: File) => {
