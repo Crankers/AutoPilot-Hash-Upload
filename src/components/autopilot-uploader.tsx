@@ -156,17 +156,39 @@ export default function AutopilotUploader() {
   const { toast } = useToast();
 
   const groupTags = useMemo(() => {
-    const envTags = process.env.NEXT_PUBLIC_GROUP_TAG_LIST;
-    if (envTags) {
+    const envTagsString = process.env.NEXT_PUBLIC_GROUP_TAG_LIST;
+
+    if (envTagsString) {
       try {
-        const parsedTags = JSON.parse(envTags);
-        if (Array.isArray(parsedTags) && parsedTags.every(tag => typeof tag.displayName === 'string' && typeof tag.backendTag === 'string')) {
-          return parsedTags as GroupTagOption[];
+        const parsedEnvTags = JSON.parse(envTagsString);
+        if (
+          Array.isArray(parsedEnvTags) &&
+          parsedEnvTags.every(
+            (tag): tag is GroupTagOption =>
+              typeof tag === 'object' &&
+              tag !== null &&
+              typeof tag.displayName === 'string' &&
+              typeof tag.backendTag === 'string'
+          )
+        ) {
+          // If env var is set and valid, use it exclusively.
+          return parsedEnvTags;
+        } else {
+          // Env var is set but malformed (not an array of correct objects)
+          console.warn(
+            "NEXT_PUBLIC_GROUP_TAG_LIST is set but not in the expected format (e.g., not an array of {displayName: string, backendTag: string} objects). Falling back to default group tags."
+          );
         }
       } catch (error) {
-        console.error("Failed to parse NEXT_PUBLIC_GROUP_TAG_LIST:", error);
+        // JSON parsing error
+        console.error(
+          "Error parsing NEXT_PUBLIC_GROUP_TAG_LIST from environment variable:",
+          error,
+          "Please ensure it's a valid JSON string. Falling back to default group tags."
+        );
       }
     }
+    // If env var is not set, or if it was set but invalid
     return defaultGroupTags;
   }, []);
 
@@ -906,6 +928,7 @@ export default function AutopilotUploader() {
 
 
     
+
 
 
 
