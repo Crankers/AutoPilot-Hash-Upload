@@ -22,13 +22,15 @@ interface ValidationIssue {
   type: 'duplicate' | 'invalid_format' | 'max_count_exceeded' | 'empty' | 'general' | 'intune_submission';
   message: string;
   count?: number;
+  details?: any; 
 }
 
 interface ConfirmationDetails {
   count: number;
   timestamp: string;
   groupTag: string;
-  intuneMessage?: string; // For message from Intune flow
+  intuneMessage?: string; 
+  details?: any;
 }
 
 const MAX_HASHES = 1000;
@@ -92,9 +94,11 @@ export default function AutopilotUploader() {
     const seen = new Set<string>();
     const duplicates: string[] = [];
     hashes.forEach(hash => {
-      if (hash.length < 10 && !hash.startsWith("VALID-")) { 
+      // Basic format check - a real Autopilot hash is more complex (Base64, specific length)
+      // This is a very loose client-side check. Server/Intune will do the real validation.
+      if (hash.length < 10 || hash.includes(" ") || !/^[a-zA-Z0-9+/=]+$/.test(hash) && !hash.startsWith("VALID-")) { 
         if(hash !== "duplicate_hash_example" && hash !== "another_duplicate" && hash !== "invalid_hash_example") {
-          issues.push({ type: 'invalid_format', message: `Hash "${hash}" has an invalid format.`, count: (issues.find(i => i.type === 'invalid_format')?.count || 0) + 1 });
+          issues.push({ type: 'invalid_format', message: `Hash "${hash.substring(0,30)}..." appears to have an invalid format or characters.`, count: (issues.find(i => i.type === 'invalid_format')?.count || 0) + 1 });
         }
       }
       if (seen.has(hash)) {
@@ -139,9 +143,10 @@ export default function AutopilotUploader() {
     setUploadProgress(0);
     setFileName(fileName || "Pasted Hashes");
     setSubmissionStatusMessage('Validating local file and hashes...');
+    setValidationIssues([]); // Clear previous issues
 
-    for (let i = 0; i <= 100; i += 10) {
-      await new Promise(resolve => setTimeout(resolve, 50));
+    for (let i = 0; i <= 20; i += 5) { // Faster initial progress
+      await new Promise(resolve => setTimeout(resolve, 30));
       setUploadProgress(i);
     }
     
@@ -153,7 +158,8 @@ export default function AutopilotUploader() {
       setOverallValidationMessage(`Client-side validation failed: ${summary}`);
       setStage('validationFailed');
     } else {
-      setOverallValidationMessage('Client-side validation passed.');
+      setOverallValidationMessage('Client-side validation passed. Submitting to Intune...');
+      setUploadProgress(30); 
       setSubmissionStatusMessage('Submitting to Intune...');
       try {
         const response = await fetch('/api/upload-to-intune', {
@@ -161,22 +167,25 @@ export default function AutopilotUploader() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ deviceHashes: parsedInputHashes, groupTag: selectedGroupTag }),
         });
-
+        
+        setUploadProgress(70);
         const result = await response.json() as UploadHashesToIntuneOutput;
+        setUploadProgress(100);
 
-        if (response.ok && result.success) {
+        if (result.success) { // Check our flow's success flag
           setConfirmationDetails({
             count: result.processedCount || parsedInputHashes.length,
             timestamp: new Date().toLocaleString(),
             groupTag: selectedGroupTag,
             intuneMessage: result.message,
+            details: result.details,
           });
-          setOverallValidationMessage(result.message); 
+          setOverallValidationMessage(result.message || "Submission to Intune was successful."); 
           setStage('success');
         } else {
-           const errorMessage = result.message || (result as any).error || `Failed to submit to Intune. Status: ${response.status}`;
+           const errorMessage = result.message || (result as any).error || `Failed to submit to Intune. Status: ${response.status || 'Unknown'}`;
            setOverallValidationMessage(`Intune Submission Failed: ${errorMessage}`);
-           setValidationIssues(prev => [...prev, { type: 'intune_submission', message: errorMessage }]);
+           setValidationIssues(prev => [...prev, { type: 'intune_submission', message: errorMessage, details: result.details }]);
            setStage('validationFailed');
            toast({
              variant: "destructive",
@@ -185,10 +194,11 @@ export default function AutopilotUploader() {
            });
         }
       } catch (error) {
+        setUploadProgress(100);
         console.error("Intune submission API error:", error);
         const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred while contacting the submission service.";
         setOverallValidationMessage(`Intune Submission Error: ${errorMessage}`);
-        setValidationIssues(prev => [...prev, { type: 'intune_submission', message: `Network or system error: ${errorMessage}` }]);
+        setValidationIssues(prev => [...prev, { type: 'intune_submission', message: `Network or system error: ${errorMessage}`, details: error instanceof Error ? error.stack : String(error) }]);
         setStage('validationFailed');
         toast({
           variant: "destructive",
@@ -296,7 +306,7 @@ export default function AutopilotUploader() {
       const file = event.dataTransfer.files[0];
        processFile(file);
     }
-  }, [processInput, toast, selectedGroupTag]); 
+  }, [processInput, toast, selectedGroupTag, processFile]); 
 
   const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -460,11 +470,21 @@ export default function AutopilotUploader() {
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Issues Found</AlertTitle>
           <AlertDescription>
-            {overallValidationMessage || "An unknown error occurred."}
+            <p className="font-semibold mb-1">{overallValidationMessage || "An unknown error occurred."}</p>
             {validationIssues.length > 0 && (
-                 <ul className="mt-2 list-disc list-inside space-y-1">
+                 <ul className="mt-2 list-disc list-inside space-y-1 text-sm">
                  {validationIssues.map((issue, index) => (
-                   <li key={index}>{issue.message}</li>
+                   <li key={index}>
+                     {issue.message}
+                     {issue.type === 'intune_submission' && issue.details && (
+                       <details className="mt-1 cursor-pointer">
+                         <summary className="text-xs text-muted-foreground hover:underline">Show technical details</summary>
+                         <pre className="mt-1 text-xs bg-muted p-2 rounded whitespace-pre-wrap break-all border">
+                           {typeof issue.details === 'string' ? issue.details : JSON.stringify(issue.details, null, 2)}
+                         </pre>
+                       </details>
+                     )}
+                   </li>
                  ))}
                </ul>
             )}
@@ -500,7 +520,15 @@ export default function AutopilotUploader() {
             <p className="text-sm"><span className="font-semibold">Number of hashes processed:</span> {confirmationDetails.count}</p>
             <p className="text-sm"><span className="font-semibold">Group Tag:</span> {confirmationDetails.groupTag}</p>
             <p className="text-sm"><span className="font-semibold">Timestamp:</span> {confirmationDetails.timestamp}</p>
-            <p className="text-xs text-muted-foreground mt-2">This is a conceptual confirmation. In a real scenario, check Microsoft Intune for actual import status.</p>
+            {confirmationDetails.details && (
+                 <details className="mt-2 cursor-pointer">
+                    <summary className="text-xs text-muted-foreground hover:underline">Show submission details</summary>
+                    <pre className="mt-1 text-xs bg-muted p-2 rounded whitespace-pre-wrap break-all border">
+                        {typeof confirmationDetails.details === 'string' ? confirmationDetails.details : JSON.stringify(confirmationDetails.details, null, 2)}
+                    </pre>
+                 </details>
+            )}
+            <p className="text-xs text-muted-foreground mt-2">This confirmation reflects the API response. Always verify in Microsoft Intune.</p>
           </div>
         )}
       </CardContent>
@@ -524,8 +552,8 @@ export default function AutopilotUploader() {
             <li>Maximum file size: {MAX_FILE_SIZE_MB}MB.</li>
             <li>Maximum {MAX_HASHES} hashes per upload.</li>
             <li>Supported formats: .txt or .csv (ensure hashes are in the first column or one per line for .txt).</li>
-            <li>Each hash should be on a new line.</li>
-            <li>The Intune upload requires proper Azure AD app registration and environment variables.</li>
+            <li>Each hash should be on a new line and be a valid Base64 string (typically the 4K HH).</li>
+            <li>The Intune upload requires proper Azure AD app registration and environment variables (GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET, GRAPH_TENANT_ID).</li>
           </ul>
         </CardContent>
       </Card>
@@ -538,4 +566,3 @@ export default function AutopilotUploader() {
     </div>
   );
 }
-

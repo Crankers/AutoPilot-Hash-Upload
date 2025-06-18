@@ -81,6 +81,7 @@ const uploadHashesToIntuneFlow = ai.defineFlow(
         success: false,
         message: 'Azure AD client credentials (GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET, GRAPH_TENANT_ID) are not configured in environment variables.',
         errorCount: deviceHashes.length,
+        processedCount: 0,
       };
     }
 
@@ -89,6 +90,7 @@ const uploadHashesToIntuneFlow = ai.defineFlow(
         success: false,
         message: 'No device hashes provided for Intune upload.',
         errorCount: 0,
+        processedCount: 0,
       };
     }
 
@@ -98,11 +100,9 @@ const uploadHashesToIntuneFlow = ai.defineFlow(
       const devicesToImport = deviceHashes.map((hash, index) => ({
         '@odata.type': '#microsoft.graph.importedWindowsAutopilotDeviceIdentity',
         groupTag: groupTag,
-        hardwareIdentifier: hash, // Assuming the hash is already in the correct Base64 format from Get-WindowsAutopilotInfo
-        // SerialNumber is required by the API. Generate a placeholder if not provided.
-        // In a real scenario, you might want to include actual serial numbers in the input.
+        hardwareIdentifier: hash, 
         serialNumber: `SERIAL_${hash.substring(0, 10)}_${index}`, 
-        productKey: '', // Often empty
+        productKey: '', 
       }));
 
       const importUrl = 'https://graph.microsoft.com/v1.0/deviceManagement/importedWindowsAutopilotDeviceIdentities/import';
@@ -119,60 +119,109 @@ const uploadHashesToIntuneFlow = ai.defineFlow(
       });
 
       if (importResponse.ok) {
-        // The import API might return 202 Accepted for async processing,
-        // or 200/201 with a list of successfully imported/updated devices or import job details.
-        // For simplicity, we'll treat any 2xx as a successful initiation.
-        // A robust implementation would handle polling for status if 202 is returned.
         let responseData;
         try {
             responseData = await importResponse.json();
         } catch (e) {
-            responseData = await importResponse.text(); // if not json
+            responseData = await importResponse.text(); 
         }
 
-        // Check if the response contains information about failures
-        // This is a simplified check; the actual response structure for partial failures can be complex (e.g., 207 Multi-Status)
-        let successfulImports = devicesToImport.length;
+        let successfulImports = 0;
         let failedImports = 0;
-        let message = `Successfully initiated import of ${devicesToImport.length} devices to Intune with group tag "${groupTag}".`;
+        let responseMessage = "";
+        const individualErrorMessages: string[] = [];
 
-        if (importResponse.status === 200 || importResponse.status === 201) {
-             // If API returns array of created/updated objects, `responseData.value` might exist
-            if (Array.isArray(responseData.value)) {
-                successfulImports = responseData.value.filter((item: any) => !item.error).length;
-                failedImports = devicesToImport.length - successfulImports;
-                if (failedImports > 0) {
-                    message = `Import attempt to Intune for group tag "${groupTag}": ${successfulImports} succeeded, ${failedImports} failed. Check details.`;
-                } else {
-                     message = `Successfully imported ${successfulImports} devices to Intune with group tag "${groupTag}".`;
+        if (importResponse.status === 202) {
+            responseMessage = `Successfully submitted ${devicesToImport.length} devices for asynchronous import to Intune with group tag "${groupTag}". Check Intune for status.`;
+            successfulImports = devicesToImport.length;
+        } else if (responseData.value && Array.isArray(responseData.value)) {
+            // This logic assumes responseData.value contains results for each device if status is 200, 201 or 207
+            // For 200/201, items in .value are typically successful imports.
+            // For 207, items in .value could be mixed results (e.g. importedDeviceIdentityResult)
+            responseData.value.forEach((item: any) => {
+                if (importResponse.status === 207) { // Multi-Status
+                    if (item.importStatus === true || (item.error == null && item.id != null)) { // Check for positive import status or lack of error
+                        successfulImports++;
+                    } else {
+                        failedImports++;
+                        if (item.error) individualErrorMessages.push(`Device ${item.hardwareIdentifier || 'unknown'}: ${item.error}`);
+                        else individualErrorMessages.push(`Device ${item.hardwareIdentifier || 'unknown'}: Failed with unknown error in multi-status response.`);
+                    }
+                } else { // For 200/201, assume item in value is a success unless it explicitly has an error property
+                    if (item.error) {
+                         failedImports++;
+                         let itemErrorMsg = (typeof item.error === 'string') ? item.error : (item.error.message || 'Unknown item error');
+                         individualErrorMessages.push(`Device ${item.hardwareIdentifier || item.id || 'unknown'}: ${itemErrorMsg}`);
+                    } else {
+                        successfulImports++;
+                    }
                 }
+            });
+            
+            if (failedImports > 0) {
+                responseMessage = `Import to Intune for group tag "${groupTag}": ${successfulImports} succeeded, ${failedImports} failed.`;
+                if(individualErrorMessages.length > 0) responseMessage += " Specific errors: " + individualErrorMessages.join("; ");
+            } else if (successfulImports > 0) {
+                responseMessage = `Successfully imported ${successfulImports} devices to Intune with group tag "${groupTag}".`;
+            } else if (devicesToImport.length > 0) {
+                 responseMessage = `Attempted to import ${devicesToImport.length} devices. Intune response did not confirm successful import for any.`;
+                 failedImports = devicesToImport.length; // Mark all as failed if no positive confirmation
+            } else {
+                responseMessage = "No devices were processed.";
             }
+
+        } else { // Non-array response for 2xx, or empty value array
+             if(devicesToImport.length > 0 && successfulImports === 0 && failedImports === 0) {
+                // If no items were parsed from responseData.value but it was a 2xx
+                successfulImports = devicesToImport.length; // Assume all ok if 2xx and no specific errors reported
+                responseMessage = `Successfully imported ${devicesToImport.length} devices to Intune with group tag "${groupTag}". (Response format not fully parsed for details)`;
+             } else if (devicesToImport.length === 0) {
+                responseMessage = "No devices were processed.";
+             }
         }
-
-
+        
         return {
-          success: true,
-          message: message,
-          processedCount: devicesToImport.length,
+          success: failedImports === 0 && (successfulImports > 0 || devicesToImport.length === 0), // Success if no failures and at least one import (or no devices to import)
+          message: responseMessage,
+          processedCount: successfulImports,
           errorCount: failedImports,
           details: responseData,
         };
-      } else {
+
+      } else { // importResponse NOT ok (4xx, 5xx errors)
         const errorData = await importResponse.json().catch(() => importResponse.text());
         console.error('Intune Import API Error:', errorData);
+        let detailedMessage = `Failed to import devices to Intune: ${importResponse.status} ${importResponse.statusText}.`;
+        
+        if (typeof errorData === 'object' && errorData !== null && errorData.error && errorData.error.message) {
+          detailedMessage += ` Details: ${errorData.error.message}`;
+        } else if (typeof errorData === 'string' && errorData.length > 0 && errorData.length < 500) { // Avoid overly long string details here
+          detailedMessage += ` Response: ${errorData}`;
+        } else if (typeof errorData === 'object' && errorData !== null) {
+            // Try to get a general message if error.message is not present
+            const genericError = JSON.stringify(errorData).substring(0, 200); // Cap length
+            detailedMessage += ` Raw error: ${genericError}...`;
+        }
+
         return {
           success: false,
-          message: `Failed to import devices to Intune: ${importResponse.status} ${importResponse.statusText}.`,
+          message: detailedMessage,
+          processedCount: 0,
           errorCount: deviceHashes.length,
-          details: errorData,
+          details: errorData, // Pass full error data for frontend display
         };
       }
     } catch (error: any) {
       console.error('Error in uploadHashesToIntuneFlow:', error);
+      let errorMessage = `An unexpected error occurred: ${error.message}`;
+      if (error.cause) { // Fetch API often includes original error in cause
+        errorMessage += ` Caused by: ${error.cause}`;
+      }
       return {
         success: false,
-        message: `An unexpected error occurred: ${error.message}`,
+        message: errorMessage,
         errorCount: deviceHashes.length,
+        processedCount: 0,
         details: error.toString(),
       };
     }
