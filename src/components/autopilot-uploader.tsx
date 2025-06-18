@@ -28,9 +28,14 @@ interface ValidationIssue {
 interface ConfirmationDetails {
   count: number;
   timestamp: string;
-  groupTag: string;
+  groupTagDisplayName: string;
   intuneMessage?: string;
   details?: any;
+}
+
+interface GroupTagOption {
+  displayName: string;
+  backendTag: string;
 }
 
 const MAX_HASHES = 1000;
@@ -38,7 +43,14 @@ const MAX_FILE_SIZE_MB = 5;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 // To update the available group tags, edit this array directly.
-const exampleGroupTags = ["Corporate", "Kiosk", "SharedDevice", "Executive", "StandardUser"];
+// Each object should have a 'displayName' for the UI and a 'backendTag' (3-4 chars) for the API.
+const exampleGroupTags: GroupTagOption[] = [
+  { displayName: "Corporate Standard", backendTag: "CORP" },
+  { displayName: "Kiosk Device", backendTag: "KIOS" },
+  { displayName: "Shared Device", backendTag: "SHRD" },
+  { displayName: "Executive User", backendTag: "EXEC" },
+  { displayName: "Standard User", backendTag: "STDU" },
+];
 
 const POWERSHELL_SCRIPT = `New-Item -Type Directory -Path "C:\\HWID" -ErrorAction SilentlyContinue
 Set-Location -Path "C:\\HWID"
@@ -54,7 +66,7 @@ export default function AutopilotUploader() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [pastedText, setPastedText] = useState('');
   const [isDraggingOver, setIsDraggingOver] = useState(false);
-  const [selectedGroupTag, setSelectedGroupTag] = useState<string>("");
+  const [selectedBackendTag, setSelectedBackendTag] = useState<string>("");
 
   const [validationIssues, setValidationIssues] = useState<ValidationIssue[]>([]);
   const [overallValidationMessage, setOverallValidationMessage] = useState('');
@@ -64,6 +76,11 @@ export default function AutopilotUploader() {
   const [confirmationDetails, setConfirmationDetails] = useState<ConfirmationDetails | null>(null);
 
   const { toast } = useToast();
+
+  const getSelectedGroupTagDisplayName = useCallback(() => {
+    const selectedOption = exampleGroupTags.find(opt => opt.backendTag === selectedBackendTag);
+    return selectedOption ? selectedOption.displayName : "N/A";
+  }, [selectedBackendTag]);
 
   const resetState = useCallback(() => {
     setStage('idle');
@@ -75,7 +92,7 @@ export default function AutopilotUploader() {
     setOverallValidationMessage('');
     setSubmissionStatusMessage('');
     setConfirmationDetails(null);
-    setSelectedGroupTag("");
+    setSelectedBackendTag("");
     const fileUploadInput = document.getElementById('file-upload') as HTMLInputElement | null;
     if (fileUploadInput) {
         fileUploadInput.value = "";
@@ -100,6 +117,8 @@ export default function AutopilotUploader() {
             break;
         }
     }
+    if (!firstNonEmptyLine) return []; // No content after trimming and filtering
+
     const firstLineLower = firstNonEmptyLine.toLowerCase();
 
     const isAutopilotCsv =
@@ -110,25 +129,30 @@ export default function AutopilotUploader() {
     if (isAutopilotCsv) {
       let headerSkipped = false;
       for (const line of lines) {
-        if (!headerSkipped && line.toLowerCase() === firstLineLower) {
+        if (!headerSkipped && line.toLowerCase() === firstLineLower) { // Compare with the detected first line
             headerSkipped = true;
             continue;
         }
-        if (!headerSkipped && line.trim() !== "") continue; 
-        if (line.trim() === "") continue; 
+        // If header hasn't been skipped yet and current line is not empty, it must be part of the header or invalid.
+        // This helps skip multiple header lines or preamble text if present.
+        if (!headerSkipped && line.trim() !== "") continue;
+        if (line.trim() === "") continue; // Skip empty lines after header
 
         const columns = line.split(',');
         if (columns.length >= 3) {
-          let hash = columns[2].trim();
+          let hash = columns[2].trim(); // Hardware Hash is typically the 3rd column (index 2)
+          // Remove surrounding quotes if present
           if (hash.startsWith('"') && hash.endsWith('"')) {
             hash = hash.substring(1, hash.length - 1);
           }
-          if (hash.length > 0) {
+          if (hash.length > 0) { // Ensure hash is not empty after trimming quotes
             outputHashes.push(hash);
           }
         }
       }
     } else {
+      // If not a CSV, assume it's a list of hashes, one per line.
+      // Only add lines that do not contain commas.
       for (const line of lines) {
         if (line.trim() !== "" && !line.includes(',')) {
             outputHashes.push(line);
@@ -152,9 +176,11 @@ export default function AutopilotUploader() {
     const seen = new Set<string>();
     const duplicates: string[] = [];
     hashes.forEach(hash => {
-      if (!/^[A-Za-z0-9+/=]+$/.test(hash) || hash.length < 10) {
+      // Updated regex: more specific to Base64, allows for padding, and checks length.
+      // A typical Autopilot hash is ~4000 chars but can vary. Minimum length for a meaningful hash is arbitrary but set to avoid tiny strings.
+      if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(hash) || hash.length < 20) {
          if(hash !== "duplicate_hash_example" && hash !== "another_duplicate" && hash !== "invalid_hash_example") {
-          issues.push({ type: 'invalid_format', message: `Hash "${hash.substring(0,30)}..." appears to have an invalid format or characters. Hashes should be Base64 encoded.`, count: (issues.find(i => i.type === 'invalid_format')?.count || 0) + 1 });
+          issues.push({ type: 'invalid_format', message: `Hash "${hash.substring(0,30)}..." appears to have an invalid format, unsupported characters, or is too short. Hashes should be Base64 encoded.`, count: (issues.find(i => i.type === 'invalid_format')?.count || 0) + 1 });
         }
       }
       if (seen.has(hash)) {
@@ -192,7 +218,7 @@ export default function AutopilotUploader() {
   }, [setFileName]);
 
   const processInput = useCallback(async (parsedInputHashes: string[]) => {
-    if (!selectedGroupTag) {
+    if (!selectedBackendTag) {
         toast({
             variant: "destructive",
             title: "Group Tag Required",
@@ -227,7 +253,7 @@ export default function AutopilotUploader() {
         const response = await fetch('/api/upload-to-intune', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deviceHashes: parsedInputHashes, groupTag: selectedGroupTag }),
+          body: JSON.stringify({ deviceHashes: parsedInputHashes, groupTag: selectedBackendTag }),
         });
         
         setUploadProgress(70);
@@ -238,7 +264,7 @@ export default function AutopilotUploader() {
           setConfirmationDetails({
             count: result.processedCount || parsedInputHashes.length,
             timestamp: new Date().toLocaleString(),
-            groupTag: selectedGroupTag,
+            groupTagDisplayName: getSelectedGroupTagDisplayName(),
             intuneMessage: result.message,
             details: result.details,
           });
@@ -246,11 +272,16 @@ export default function AutopilotUploader() {
           setStage('success');
         } else {
            let errorMessage = result.message || (result as any).error || `Failed to submit to Intune. Status: ${response.status || 'Unknown'}`;
-           if (typeof result.details === 'object' && result.details !== null && (result.details as any).error?.message) {
-             errorMessage = `Failed to submit to Intune: ${(result.details as any).error.message}`;
-           } else if (typeof result.details === 'string' && result.details.length > 0 && result.details.length < 500) { 
+            if (typeof result.details === 'object' && result.details !== null) {
+                const errorObj = (result.details as any).error;
+                if (errorObj && errorObj.message) {
+                    errorMessage = `Intune API Error: ${errorObj.message}`;
+                } else if (JSON.stringify(result.details).length < 500) { // Avoid overly long string details
+                    errorMessage = `Failed to submit to Intune. Details: ${JSON.stringify(result.details)}`;
+                }
+            } else if (typeof result.details === 'string' && result.details.length > 0 && result.details.length < 500) { 
              errorMessage = `Failed to submit to Intune. Details: ${result.details}`;
-           }
+            }
 
            setOverallValidationMessage(`Intune Submission Failed: ${errorMessage}`);
            setValidationIssues(prev => [...prev, { type: 'intune_submission', message: errorMessage, details: result.details }]);
@@ -275,7 +306,7 @@ export default function AutopilotUploader() {
         });
       }
     }
-  }, [selectedGroupTag, toast, validateHashes]);
+  }, [selectedBackendTag, toast, validateHashes, parseHashes, getSelectedGroupTagDisplayName]);
 
 
   const processFile = useCallback((file: File) => {
@@ -337,7 +368,7 @@ export default function AutopilotUploader() {
   const handleFileChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      if (!selectedGroupTag) {
+      if (!selectedBackendTag) {
         toast({
             variant: "destructive",
             title: "Group Tag Required",
@@ -348,13 +379,13 @@ export default function AutopilotUploader() {
       }
       processFile(file);
     }
-  }, [selectedGroupTag, toast, processFile, handleFileUploadError]);
+  }, [selectedBackendTag, toast, processFile, handleFileUploadError]);
 
   const handleDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
     setIsDraggingOver(false);
-    if (!selectedGroupTag) {
+    if (!selectedBackendTag) {
         toast({
             variant: "destructive",
             title: "Group Tag Required",
@@ -366,15 +397,15 @@ export default function AutopilotUploader() {
       const file = event.dataTransfer.files[0];
        processFile(file);
     }
-  }, [selectedGroupTag, toast, processFile, setIsDraggingOver]); 
+  }, [selectedBackendTag, toast, processFile, setIsDraggingOver]); 
 
   const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    if (selectedGroupTag) {
+    if (selectedBackendTag) {
         setIsDraggingOver(true);
     }
-  }, [selectedGroupTag, setIsDraggingOver]);
+  }, [selectedBackendTag, setIsDraggingOver]);
 
   const handleDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -383,7 +414,7 @@ export default function AutopilotUploader() {
   }, [setIsDraggingOver]);
 
   const handleProcessPasted = useCallback(() => {
-    if (!selectedGroupTag) {
+    if (!selectedBackendTag) {
         toast({
             variant: "destructive",
             title: "Group Tag Required",
@@ -394,7 +425,7 @@ export default function AutopilotUploader() {
     const parsed = parseHashes(pastedText);
     setFileName("Pasted Hashes"); 
     processInput(parsed);
-  }, [selectedGroupTag, toast, pastedText, setFileName, processInput, parseHashes]);
+  }, [selectedBackendTag, toast, pastedText, setFileName, processInput, parseHashes]);
 
   const handleCopyScript = useCallback(() => {
     navigator.clipboard.writeText(POWERSHELL_SCRIPT)
@@ -413,7 +444,7 @@ export default function AutopilotUploader() {
 
 
   const renderIdleUI = () => {
-    const isGroupTagProvided = !!selectedGroupTag;
+    const isGroupTagProvided = !!selectedBackendTag;
 
     return (
     <Card className="shadow-lg">
@@ -425,13 +456,13 @@ export default function AutopilotUploader() {
         <div className="space-y-6">
             <div className="space-y-2">
                 <Label htmlFor="group-tag-select" className="text-base font-medium">Group Tag</Label>
-                 <Select value={selectedGroupTag} onValueChange={setSelectedGroupTag}>
+                 <Select value={selectedBackendTag} onValueChange={setSelectedBackendTag}>
                     <SelectTrigger id="group-tag-select" className="w-full">
                         <SelectValue placeholder="Select a group tag..." />
                     </SelectTrigger>
                     <SelectContent>
-                        {exampleGroupTags.map(tag => (
-                            <SelectItem key={tag} value={tag}>{tag}</SelectItem>
+                        {exampleGroupTags.map(tagOpt => (
+                            <SelectItem key={tagOpt.backendTag} value={tagOpt.backendTag}>{tagOpt.displayName}</SelectItem>
                         ))}
                     </SelectContent>
                 </Select>
@@ -520,7 +551,7 @@ export default function AutopilotUploader() {
           Processing Hashes
         </CardTitle>
         {fileName && <CardDescription>File: {fileName}</CardDescription>}
-        <CardDescription>Group Tag: {selectedGroupTag}</CardDescription>
+        <CardDescription>Group Tag: {getSelectedGroupTagDisplayName()}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <p className="text-sm text-muted-foreground">{submissionStatusMessage || 'Your hashes are being processed. Please wait...'}</p>
@@ -538,7 +569,7 @@ export default function AutopilotUploader() {
           Processing Failed
         </CardTitle>
         {fileName && <CardDescription>File: {fileName}</CardDescription>}
-        <CardDescription>Group Tag: {selectedGroupTag}</CardDescription>
+        <CardDescription>Group Tag: {getSelectedGroupTagDisplayName()}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <Alert variant="destructive">
@@ -593,7 +624,7 @@ export default function AutopilotUploader() {
         {confirmationDetails && (
           <div className="p-4 border rounded-md bg-secondary/50">
             <p className="text-sm"><span className="font-semibold">Number of hashes processed:</span> {confirmationDetails.count}</p>
-            <p className="text-sm"><span className="font-semibold">Group Tag:</span> {confirmationDetails.groupTag}</p>
+            <p className="text-sm"><span className="font-semibold">Group Tag:</span> {confirmationDetails.groupTagDisplayName}</p>
             <p className="text-sm"><span className="font-semibold">Timestamp:</span> {confirmationDetails.timestamp}</p>
             {confirmationDetails.details && (
                  <details className="mt-2 cursor-pointer">
@@ -683,6 +714,7 @@ export default function AutopilotUploader() {
             <li>Supported formats: .txt or .csv (ensure hashes are in the third column if a CSV header is present, or one per line for .txt).</li>
             <li>Each hash should be on a new line and be a valid Base64 string (typically the 4K HH).</li>
             <li>The Intune upload requires proper Azure AD app registration and environment variables (GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET, GRAPH_TENANT_ID).</li>
+            <li>To update the available Group Tags, edit the `exampleGroupTags` array at the top of the `src/components/autopilot-uploader.tsx` file.</li>
           </ul>
         </CardContent>
       </Card>
