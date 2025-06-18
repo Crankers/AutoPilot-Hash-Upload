@@ -48,8 +48,6 @@ const defaultGroupTags: GroupTagOption[] = [
   { displayName: "Shared Device", backendTag: "SHRD" },
   { displayName: "Executive User", backendTag: "EXEC" },
   { displayName: "Standard User", backendTag: "STDU" },
-  { displayName: "Quanta Services", backendTag: "QCO" },
-  { displayName: "Nationwide Insurance", backendTag: "NWI" },
 ];
 
 const POWERSHELL_SCRIPT_ADMIN = `New-Item -Type Directory -Path "C:\\HWID" -ErrorAction SilentlyContinue
@@ -928,6 +926,7 @@ export default function AutopilotUploader() {
 
 
     
+
 
 
 
