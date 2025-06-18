@@ -2,6 +2,7 @@
 "use client";
 
 import { suggestRemediation } from "@/ai/flows/suggest-remediation";
+import { UploadHashesToIntuneOutput } from "@/ai/flows/upload-to-intune-flow"; // Output type for API response
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -20,9 +21,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 type UploadStage = 'idle' | 'uploading' | 'validationFailed' | 'success';
 interface ValidationIssue {
-  type: 'duplicate' | 'invalid_format' | 'max_count_exceeded' | 'empty' | 'general';
+  type: 'duplicate' | 'invalid_format' | 'max_count_exceeded' | 'empty' | 'general' | 'intune_submission';
   message: string;
   count?: number;
+}
+
+interface ConfirmationDetails {
+  count: number;
+  timestamp: string;
+  groupTag: string;
+  intuneMessage?: string; // For message from Intune flow
 }
 
 const MAX_HASHES = 1000;
@@ -42,8 +50,10 @@ export default function AutopilotUploader() {
 
   const [validationIssues, setValidationIssues] = useState<ValidationIssue[]>([]);
   const [overallValidationMessage, setOverallValidationMessage] = useState('');
+  const [submissionStatusMessage, setSubmissionStatusMessage] = useState('');
 
-  const [confirmationDetails, setConfirmationDetails] = useState<{ count: number; timestamp: string; groupTag: string; } | null>(null);
+
+  const [confirmationDetails, setConfirmationDetails] = useState<ConfirmationDetails | null>(null);
 
   const [aiSuggestions, setAiSuggestions] = useState<string | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
@@ -59,12 +69,12 @@ export default function AutopilotUploader() {
     setPastedText('');
     setValidationIssues([]);
     setOverallValidationMessage('');
+    setSubmissionStatusMessage('');
     setConfirmationDetails(null);
     setAiSuggestions(null);
     setIsAiLoading(false);
     setShowAiDialog(false);
     setSelectedGroupTag("");
-    // Clear file input as part of reset
     const fileUploadInput = document.getElementById('file-upload') as HTMLInputElement | null;
     if (fileUploadInput) {
         fileUploadInput.value = "";
@@ -130,34 +140,71 @@ export default function AutopilotUploader() {
             title: "Group Tag Required",
             description: "Please select a Group Tag before processing.",
         });
-        setStage('idle'); // Ensure stage is idle if group tag is missing
+        setStage('idle');
         return;
     }
     setRawHashes(parsedInputHashes);
     setStage('uploading');
     setUploadProgress(0);
-    setFileName(fileName || "Pasted Hashes"); // Ensure fileName is set if coming from paste
+    setFileName(fileName || "Pasted Hashes");
+    setSubmissionStatusMessage('Validating local file and hashes...');
 
     for (let i = 0; i <= 100; i += 10) {
       await new Promise(resolve => setTimeout(resolve, 50));
       setUploadProgress(i);
     }
     
-    const issues = validateHashes(parsedInputHashes);
-    setValidationIssues(issues);
+    const clientValidationIssues = validateHashes(parsedInputHashes);
+    setValidationIssues(clientValidationIssues);
 
-    if (issues.length > 0) {
-      const summary = issues.map(issue => `${issue.message}${issue.count ? ` (${issue.count} occurrences)` : ''}`).join(' ');
-      setOverallValidationMessage(`Validation failed: ${summary}`);
+    if (clientValidationIssues.length > 0) {
+      const summary = clientValidationIssues.map(issue => `${issue.message}${issue.count ? ` (${issue.count} occurrences)` : ''}`).join(' ');
+      setOverallValidationMessage(`Client-side validation failed: ${summary}`);
       setStage('validationFailed');
     } else {
-      setOverallValidationMessage('Hashes validated successfully.');
-      setConfirmationDetails({
-        count: parsedInputHashes.length,
-        timestamp: new Date().toLocaleString(),
-        groupTag: selectedGroupTag,
-      });
-      setStage('success');
+      setOverallValidationMessage('Client-side validation passed.');
+      setSubmissionStatusMessage('Submitting to Intune (simulated)...');
+      try {
+        const response = await fetch('/api/upload-to-intune', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deviceHashes: parsedInputHashes, groupTag: selectedGroupTag }),
+        });
+
+        const result = await response.json() as UploadHashesToIntuneOutput;
+
+        if (response.ok && result.success) {
+          setConfirmationDetails({
+            count: result.processedCount || parsedInputHashes.length,
+            timestamp: new Date().toLocaleString(),
+            groupTag: selectedGroupTag,
+            intuneMessage: result.message,
+          });
+          setOverallValidationMessage(result.message); // Display Intune success message
+          setStage('success');
+        } else {
+           const errorMessage = result.message || (result as any).error || `Failed to submit to Intune. Status: ${response.status}`;
+           setOverallValidationMessage(`Intune Submission Failed: ${errorMessage}`);
+           setValidationIssues(prev => [...prev, { type: 'intune_submission', message: errorMessage }]);
+           setStage('validationFailed');
+           toast({
+             variant: "destructive",
+             title: "Intune Submission Error",
+             description: errorMessage,
+           });
+        }
+      } catch (error) {
+        console.error("Intune submission API error:", error);
+        const errorMessage = error instanceof Error ? error.message : "An unexpected error occurred while contacting the submission service.";
+        setOverallValidationMessage(`Intune Submission Error: ${errorMessage}`);
+        setValidationIssues(prev => [...prev, { type: 'intune_submission', message: `Network or system error: ${errorMessage}` }]);
+        setStage('validationFailed');
+        toast({
+          variant: "destructive",
+          title: "Network/System Error",
+          description: `Could not communicate with the Intune submission service: ${errorMessage}`,
+        });
+      }
     }
   }, [selectedGroupTag, toast, fileName]);
 
@@ -168,7 +215,6 @@ export default function AutopilotUploader() {
         fileUploadInput.value = ""; 
     }
     setFileName(null); 
-    // Do not reset stage globally here, allow specific error handlers to set stage if needed
   };
 
   const processFile = (file: File) => {
@@ -236,7 +282,7 @@ export default function AutopilotUploader() {
             title: "Group Tag Required",
             description: "Please select a Group Tag before choosing a file.",
         });
-        handleFileUploadError(); // Clear the input
+        handleFileUploadError(); 
         return;
       }
       processFile(file);
@@ -259,7 +305,7 @@ export default function AutopilotUploader() {
       const file = event.dataTransfer.files[0];
        processFile(file);
     }
-  }, [processInput, toast, selectedGroupTag]); // processInput is okay if its dependencies are stable
+  }, [processInput, toast, selectedGroupTag]); 
 
   const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -285,7 +331,7 @@ export default function AutopilotUploader() {
         return;
     }
     const parsed = parseHashes(pastedText);
-    setFileName("Pasted Hashes"); // Explicitly set for pasted content
+    setFileName("Pasted Hashes"); 
     processInput(parsed);
   };
 
@@ -294,8 +340,15 @@ export default function AutopilotUploader() {
     setIsAiLoading(true);
     setAiSuggestions(null);
     setShowAiDialog(true);
+
+    // Prepare a summary of issues for the AI
+    let issuesForAI = overallValidationMessage;
+    if (validationIssues.length > 0) {
+        issuesForAI = "Validation issues found:\n" + validationIssues.map(issue => `- ${issue.message}${issue.count ? ` (${issue.count} occurrences)` : ''}`).join('\n');
+    }
+
     try {
-      const result = await suggestRemediation({ validationResults: overallValidationMessage });
+      const result = await suggestRemediation({ validationResults: issuesForAI });
       setAiSuggestions(result.suggestions);
     } catch (error) {
       console.error("AI suggestion error:", error);
@@ -311,8 +364,6 @@ export default function AutopilotUploader() {
   };
   
   useEffect(() => {
-    // This effect primarily serves as a monitor or for future side effects based on these state changes.
-    // The core logic for stage transitions is handled within processInput.
   }, [stage, uploadProgress, validationIssues, confirmationDetails]);
 
 
@@ -424,9 +475,9 @@ export default function AutopilotUploader() {
         {selectedGroupTag && <CardDescription>Group Tag: {selectedGroupTag}</CardDescription>}
       </CardHeader>
       <CardContent className="space-y-4">
-        <p className="text-sm text-muted-foreground">Your hashes are being uploaded and validated. Please wait...</p>
+        <p className="text-sm text-muted-foreground">{submissionStatusMessage || 'Your hashes are being processed. Please wait...'}</p>
         <Progress value={uploadProgress} className="w-full [&>div]:bg-primary" />
-        <p className="text-center text-sm font-medium text-primary">{uploadProgress}%</p>
+        {uploadProgress < 100 && <p className="text-center text-sm font-medium text-primary">{uploadProgress}%</p>}
       </CardContent>
     </Card>
   );
@@ -436,7 +487,7 @@ export default function AutopilotUploader() {
       <CardHeader>
         <CardTitle className="font-headline flex items-center text-destructive">
           <XCircle className="mr-2 h-6 w-6" />
-          Validation Failed
+          Processing Failed
         </CardTitle>
         {fileName && <CardDescription>File: {fileName}</CardDescription>}
         {selectedGroupTag && <CardDescription>Group Tag: {selectedGroupTag}</CardDescription>}
@@ -446,21 +497,25 @@ export default function AutopilotUploader() {
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Issues Found</AlertTitle>
           <AlertDescription>
-            {overallValidationMessage}
-            <ul className="mt-2 list-disc list-inside space-y-1">
-              {validationIssues.map((issue, index) => (
-                <li key={index}>{issue.message}</li>
-              ))}
-            </ul>
+            {overallValidationMessage || "An unknown error occurred."}
+            {validationIssues.length > 0 && (
+                 <ul className="mt-2 list-disc list-inside space-y-1">
+                 {validationIssues.map((issue, index) => (
+                   <li key={index}>{issue.message}</li>
+                 ))}
+               </ul>
+            )}
           </AlertDescription>
         </Alert>
         
       </CardContent>
       <CardFooter className="flex flex-col sm:flex-row justify-end gap-2">
         <Button variant="outline" onClick={resetState}>Try Again</Button>
-        <Button onClick={handleGetAiSuggestions} className="bg-accent hover:bg-accent/90 text-accent-foreground">
-          <Sparkles className="mr-2 h-4 w-4" /> Get AI Remediation
-        </Button>
+        {(validationIssues.length > 0 || overallValidationMessage) && (
+            <Button onClick={handleGetAiSuggestions} className="bg-accent hover:bg-accent/90 text-accent-foreground">
+            <Sparkles className="mr-2 h-4 w-4" /> Get AI Remediation
+            </Button>
+        )}
       </CardFooter>
     </Card>
   );
@@ -470,7 +525,7 @@ export default function AutopilotUploader() {
       <CardHeader>
         <CardTitle className="font-headline flex items-center text-green-600">
           <CheckCircle2 className="mr-2 h-6 w-6" />
-          Upload Successful
+          Processing Successful
         </CardTitle>
         {fileName && <CardDescription>File: {fileName}</CardDescription>}
       </CardHeader>
@@ -479,7 +534,7 @@ export default function AutopilotUploader() {
             <CheckCircle2 className="h-4 w-4 text-green-600" />
             <AlertTitle className="text-green-700">Confirmation</AlertTitle>
             <AlertDescription className="text-green-600">
-                Your device hashes have been processed successfully.
+                {confirmationDetails?.intuneMessage || "Your device hashes have been processed successfully."}
             </AlertDescription>
         </Alert>
         {confirmationDetails && (
@@ -487,7 +542,7 @@ export default function AutopilotUploader() {
             <p className="text-sm"><span className="font-semibold">Number of hashes processed:</span> {confirmationDetails.count}</p>
             <p className="text-sm"><span className="font-semibold">Group Tag:</span> {confirmationDetails.groupTag}</p>
             <p className="text-sm"><span className="font-semibold">Timestamp:</span> {confirmationDetails.timestamp}</p>
-            <p className="text-xs text-muted-foreground mt-2">Keep these details for your audit records.</p>
+            <p className="text-xs text-muted-foreground mt-2">This is a conceptual confirmation. In a real scenario, check Microsoft Intune for actual import status.</p>
           </div>
         )}
       </CardContent>
@@ -513,6 +568,7 @@ export default function AutopilotUploader() {
             <li>Supported formats: .txt or .csv (ensure hashes are in the first column or one per line for .txt).</li>
             <li>Each hash should be on a new line.</li>
             <li>For AI Remediation, ensure your validation messages are descriptive.</li>
+            <li>The Intune upload is currently a **simulated** process for prototyping.</li>
           </ul>
         </CardContent>
       </Card>
@@ -554,4 +610,3 @@ export default function AutopilotUploader() {
     </div>
   );
 }
-
