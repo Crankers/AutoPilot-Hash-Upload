@@ -123,7 +123,7 @@ try {
     Set-Location -Path \$scriptExecutionDir -ErrorAction Stop
     Write-Host "Successfully changed location. Current directory: \$(Get-Location)"
 } catch {
-    Write-Error "Failed to change directory to \$scriptExecutionDir: \$(\$_.Exception.Message)"
+    Write-Error "Failed to change directory to \${scriptExecutionDir}: \$(\$_.Exception.Message)"
     if (Test-Path \$localZipPath) { Remove-Item \$localZipPath -Force -ErrorAction SilentlyContinue }
     if (Test-Path \$extractedRepoPath) { Remove-Item \$extractedRepoPath -Recurse -Force -ErrorAction SilentlyContinue }
     exit 1
@@ -833,7 +833,7 @@ export default function AutopilotUploader() {
                 <strong>Troubleshooting:</strong>
                 <ul className="list-disc list-inside pl-4 mt-1 space-y-1">
                     <li>If the script fails (e.g., because <code>oa3tool.exe</code> is still not found within the repository's <code>PowerShell</code> folder, or due to network/permission issues), you may need to manually ensure <code>oa3tool.exe</code> (typically part of the Windows Assessment and Deployment Kit - ADK) is available where the script expects it.</li>
-                    <li>PowerShell execution policies might also prevent script execution. You may need to adjust them (e.g., <code>Set-ExecutionPolicy RemoteSigned -Scope Process -Force</code>) or unblock the downloaded <code>.ps1</code> file if it's still present in the temp folder after a failed run.</li>
+                    <li>PowerShell execution policies might also prevent script execution. You may need to adjust them (e.g., <code>Set-ExecutionPolicy RemoteSigned -Scope Process -Force</code>) or unblock the downloaded <code>.ps1</code> file manually if it's still present in the temp folder after a failed run.</li>
                     <li>Ensure your PowerShell version is 5.0 or higher for <code>Expand-Archive</code> to work correctly.</li>
                 </ul>
             </li>
@@ -905,3 +905,4 @@ export default function AutopilotUploader() {
 
 
     
+
