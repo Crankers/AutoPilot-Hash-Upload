@@ -6,7 +6,7 @@ This Next.js application is configured to produce a standalone output, suitable 
 
 1.  **Azure Account:** You'll need an active Azure subscription.
 2.  **Azure CLI (Optional but Recommended):** [Install Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)
-3.  **Node.js and npm:** Ensure you have a compatible version installed locally to build the project.
+3.  **Node.js and npm:** Ensure you have a compatible version installed locally to build the project. [Install Node.js](https://nodejs.org/en))
 
 ### Build Steps
 
