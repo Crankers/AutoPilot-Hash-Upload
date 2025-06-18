@@ -1,7 +1,7 @@
 
 "use client";
 
-import { UploadHashesToIntuneOutput } from "@/ai/flows/upload-to-intune-flow"; // Output type for API response
+import type { UploadHashesToIntuneOutput } from "@/ai/flows/upload-to-intune-flow"; // Output type for API response
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { AlertCircle, CheckCircle2, ClipboardPaste, FileText, Loader2, Sparkles, UploadCloud, XCircle, Tag } from "lucide-react";
+import { AlertCircle, CheckCircle2, ClipboardPaste, FileText, Loader2, Sparkles, UploadCloud, XCircle, Tag, ClipboardCopy, Info } from "lucide-react";
 import React, { useState, useCallback, DragEvent, ChangeEvent, useEffect } from "react";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -22,14 +22,14 @@ interface ValidationIssue {
   type: 'duplicate' | 'invalid_format' | 'max_count_exceeded' | 'empty' | 'general' | 'intune_submission';
   message: string;
   count?: number;
-  details?: any; 
+  details?: any;
 }
 
 interface ConfirmationDetails {
   count: number;
   timestamp: string;
   groupTag: string;
-  intuneMessage?: string; 
+  intuneMessage?: string;
   details?: any;
 }
 
@@ -38,6 +38,13 @@ const MAX_FILE_SIZE_MB = 5;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 const exampleGroupTags = ["FinanceDept", "ITSupport", "SalesTeam", "HRDepartment", "Engineering"];
+
+const POWERSHELL_SCRIPT = `New-Item -Type Directory -Path "C:\\HWID" -ErrorAction SilentlyContinue
+Set-Location -Path "C:\\HWID"
+$env:Path += ";C:\\Program Files\\WindowsPowerShell\\Scripts"
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Unrestricted -Force
+Install-Script -Name Get-WindowsAutopilotInfo -Force -Confirm:$false -AcceptLicense
+Get-WindowsAutopilotInfo.ps1 -OutputFile AutopilotHWID.csv`;
 
 export default function AutopilotUploader() {
   const [stage, setStage] = useState<UploadStage>('idle');
@@ -94,11 +101,10 @@ export default function AutopilotUploader() {
     const seen = new Set<string>();
     const duplicates: string[] = [];
     hashes.forEach(hash => {
-      // Basic format check - a real Autopilot hash is more complex (Base64, specific length)
-      // This is a very loose client-side check. Server/Intune will do the real validation.
-      if (hash.length < 10 || hash.includes(" ") || !/^[a-zA-Z0-9+/=]+$/.test(hash) && !hash.startsWith("VALID-")) { 
+      // More robust Base64-like check: allows A-Z, a-z, 0-9, +, /, and = (for padding)
+      if (!/^[A-Za-z0-9+/]*=?=?$/.test(hash) || hash.length < 10) {
         if(hash !== "duplicate_hash_example" && hash !== "another_duplicate" && hash !== "invalid_hash_example") {
-          issues.push({ type: 'invalid_format', message: `Hash "${hash.substring(0,30)}..." appears to have an invalid format or characters.`, count: (issues.find(i => i.type === 'invalid_format')?.count || 0) + 1 });
+          issues.push({ type: 'invalid_format', message: `Hash "${hash.substring(0,30)}..." appears to have an invalid format or characters. Hashes should be Base64 encoded.`, count: (issues.find(i => i.type === 'invalid_format')?.count || 0) + 1 });
         }
       }
       if (seen.has(hash)) {
@@ -143,9 +149,9 @@ export default function AutopilotUploader() {
     setUploadProgress(0);
     setFileName(fileName || "Pasted Hashes");
     setSubmissionStatusMessage('Validating local file and hashes...');
-    setValidationIssues([]); // Clear previous issues
+    setValidationIssues([]); 
 
-    for (let i = 0; i <= 20; i += 5) { // Faster initial progress
+    for (let i = 0; i <= 20; i += 5) { 
       await new Promise(resolve => setTimeout(resolve, 30));
       setUploadProgress(i);
     }
@@ -172,7 +178,7 @@ export default function AutopilotUploader() {
         const result = await response.json() as UploadHashesToIntuneOutput;
         setUploadProgress(100);
 
-        if (result.success) { // Check our flow's success flag
+        if (result.success) { 
           setConfirmationDetails({
             count: result.processedCount || parsedInputHashes.length,
             timestamp: new Date().toLocaleString(),
@@ -183,7 +189,14 @@ export default function AutopilotUploader() {
           setOverallValidationMessage(result.message || "Submission to Intune was successful."); 
           setStage('success');
         } else {
-           const errorMessage = result.message || (result as any).error || `Failed to submit to Intune. Status: ${response.status || 'Unknown'}`;
+           let errorMessage = result.message || (result as any).error || `Failed to submit to Intune. Status: ${response.status || 'Unknown'}`;
+           if (typeof result.details === 'object' && result.details !== null && (result.details as any).error?.message) {
+             errorMessage = `Failed to submit to Intune: ${(result.details as any).error.message}`;
+           } else if (typeof result.details === 'string' && result.details.length > 0 && result.details.length < 200) { // Check if details is a short string
+             errorMessage = `Failed to submit to Intune. Details: ${result.details}`;
+           }
+
+
            setOverallValidationMessage(`Intune Submission Failed: ${errorMessage}`);
            setValidationIssues(prev => [...prev, { type: 'intune_submission', message: errorMessage, details: result.details }]);
            setStage('validationFailed');
@@ -207,18 +220,18 @@ export default function AutopilotUploader() {
         });
       }
     }
-  }, [selectedGroupTag, toast, fileName]);
+  }, [selectedGroupTag, toast, fileName, validateHashes, setRawHashes, setStage, setUploadProgress, setFileName, setSubmissionStatusMessage, setValidationIssues, setOverallValidationMessage, setConfirmationDetails]);
 
 
-  const handleFileUploadError = () => {
+  const handleFileUploadError = useCallback(() => {
     const fileUploadInput = document.getElementById('file-upload') as HTMLInputElement | null;
     if (fileUploadInput) {
         fileUploadInput.value = ""; 
     }
     setFileName(null); 
-  };
+  }, [setFileName]);
 
-  const processFile = (file: File) => {
+  const processFile = useCallback((file: File) => {
      const allowedExtensions = ['.txt', '.csv'];
      const fileNameParts = file.name.split('.');
      const fileExtension = fileNameParts.length > 1 ? `.${fileNameParts.pop()!.toLowerCase()}` : '';
@@ -272,9 +285,9 @@ export default function AutopilotUploader() {
         setStage('idle');
     };
     reader.readAsText(file);
-  }
+  }, [toast, handleFileUploadError, setFileName, processInput, setStage, parseHashes]);
 
-  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = useCallback((event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       if (!selectedGroupTag) {
@@ -288,7 +301,7 @@ export default function AutopilotUploader() {
       }
       processFile(file);
     }
-  };
+  }, [selectedGroupTag, toast, processFile, handleFileUploadError]);
 
   const handleDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -306,7 +319,7 @@ export default function AutopilotUploader() {
       const file = event.dataTransfer.files[0];
        processFile(file);
     }
-  }, [processInput, toast, selectedGroupTag, processFile]); 
+  }, [selectedGroupTag, toast, processFile, setIsDraggingOver]); 
 
   const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -314,15 +327,15 @@ export default function AutopilotUploader() {
     if (selectedGroupTag) {
         setIsDraggingOver(true);
     }
-  }, [selectedGroupTag]);
+  }, [selectedGroupTag, setIsDraggingOver]);
 
   const handleDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
     setIsDraggingOver(false);
-  }, []);
+  }, [setIsDraggingOver]);
 
-  const handleProcessPasted = () => {
+  const handleProcessPasted = useCallback(() => {
     if (!selectedGroupTag) {
         toast({
             variant: "destructive",
@@ -334,7 +347,19 @@ export default function AutopilotUploader() {
     const parsed = parseHashes(pastedText);
     setFileName("Pasted Hashes"); 
     processInput(parsed);
-  };
+  }, [selectedGroupTag, toast, pastedText, setFileName, processInput, parseHashes]);
+
+  const handleCopyScript = useCallback(() => {
+    navigator.clipboard.writeText(POWERSHELL_SCRIPT)
+      .then(() => {
+        toast({ title: "Script Copied!", description: "PowerShell script copied to clipboard." });
+      })
+      .catch(err => {
+        toast({ variant: "destructive", title: "Copy Failed", description: "Could not copy script." });
+        console.error('Failed to copy script: ', err);
+      });
+  }, [toast]);
+
 
   useEffect(() => {
   }, [stage, uploadProgress, validationIssues, confirmationDetails]);
@@ -540,6 +565,60 @@ export default function AutopilotUploader() {
     </Card>
   );
 
+  const renderCollectHashUI = () => (
+    <Card className="shadow-md">
+      <CardHeader>
+        <CardTitle className="font-headline text-lg flex items-center">
+          <Info className="mr-2 h-5 w-5 text-primary" />
+          How to Collect Hardware Hash
+        </CardTitle>
+        <CardDescription>
+          Follow these steps on the target Windows device to obtain its hardware hash for Autopilot.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div>
+          <Label className="font-semibold">Instructions:</Label>
+          <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground mt-1">
+            <li>Open PowerShell as an Administrator on the target Windows device.</li>
+            <li>Copy the script below.</li>
+            <li>Paste the script into the PowerShell window and press Enter.</li>
+            <li>The script will:
+              <ul className="list-disc list-inside pl-4">
+                  <li>Create a directory <code>C:\HWID</code> (if it doesn't exist).</li>
+                  <li>Download the necessary <code>Get-WindowsAutopilotInfo</code> script from PowerShell Gallery.</li>
+                  <li>Save the hardware hash to <code>C:\HWID\AutopilotHWID.csv</code>.</li>
+              </ul>
+            </li>
+            <li>You can then upload this <code>AutopilotHWID.csv</code> file using the uploader above, or copy its contents.</li>
+          </ol>
+        </div>
+        <div>
+          <Label htmlFor="powershell-script-display" className="font-semibold">PowerShell Script:</Label>
+          <div className="mt-1 relative">
+            <Textarea
+              id="powershell-script-display"
+              readOnly
+              value={POWERSHELL_SCRIPT}
+              className="bg-muted/50 font-mono text-xs h-48 resize-none"
+              rows={7}
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleCopyScript}
+              className="absolute top-2 right-2 h-7 w-7"
+              title="Copy Script"
+            >
+              <ClipboardCopy className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
+
   return (
     <div className="space-y-8 max-w-3xl mx-auto">
       <Card className="shadow-md">
@@ -563,6 +642,11 @@ export default function AutopilotUploader() {
       {stage === 'validationFailed' && renderValidationFailedUI()}
       {stage === 'success' && renderSuccessUI()}
 
+      <div className="pt-4">
+         {renderCollectHashUI()}
+      </div>
+
     </div>
   );
 }
+
