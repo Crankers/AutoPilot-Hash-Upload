@@ -1,9 +1,3 @@
-# Firebase Studio
-
-This is a NextJS starter in Firebase Studio.
-
-To get started, take a look at src/app/page.tsx.
-
 ## Deploying to Azure App Service
 
 This Next.js application is configured to produce a standalone output, suitable for deployment to platforms like Azure App Service.
@@ -12,7 +6,7 @@ This Next.js application is configured to produce a standalone output, suitable 
 
 1.  **Azure Account:** You'll need an active Azure subscription.
 2.  **Azure CLI (Optional but Recommended):** [Install Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli)
-3.  **Node.js and npm:** Ensure you have a compatible version installed locally to build the project.
+3.  **Node.js and npm:** Ensure you have a compatible version installed locally to build the project. [Install Node.js](https://nodejs.org/en)
 
 ### Build Steps
 
