@@ -89,4 +89,4 @@ This Next.js application is configured to produce a standalone output, suitable 
 *   Monitor logs via "Monitoring" -> "Log stream" in the Azure portal for any issues.
 *   It might take a few minutes for the app to start after deployment.
 
-![Screenshot of a comment on a GitHub issue showing an image, added in the Markdown, of an Octocat smiling and raising a tentacle.]([https://myoctocat.com/assets/images/base-octocat.svg](https://cdn.discordapp.com/attachments/336833638085951488/1385033821178560643/image.png?ex=685498c3&is=68534743&hm=305ca487b4870077dbaa16974d3952e54079493d8704ba39b3edb5ab6eb5e5f9&))
+![Example]([[https://myoctocat.com/assets/images/base-octocat.svg](https://cdn.discordapp.com/attachments/336833638085951488/1385033821178560643/image.png?ex=685498c3&is=68534743&hm=305ca487b4870077dbaa16974d3952e54079493d8704ba39b3edb5ab6eb5e5f9&)](https://cdn.discordapp.com/attachments/336833638085951488/1385033821178560643/image.png?ex=685498c3&is=68534743&hm=305ca487b4870077dbaa16974d3952e54079493d8704ba39b3edb5ab6eb5e5f9&))
