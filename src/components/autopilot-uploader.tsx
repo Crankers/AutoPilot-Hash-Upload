@@ -185,17 +185,25 @@ export default function AutopilotUploader() {
     event.preventDefault();
     event.stopPropagation();
     setIsDraggingOver(false);
-    if (event.dataTransfer.files && event.dataTransfer.files[0]) {
+    if (selectedGroupTag && event.dataTransfer.files && event.dataTransfer.files[0]) {
       const file = event.dataTransfer.files[0];
        processFile(file);
+    } else if (!selectedGroupTag) {
+        toast({
+            variant: "destructive",
+            title: "Group Tag Required",
+            description: "Please select a Group Tag before dropping a file.",
+        });
     }
-  }, [processInput, toast]);
+  }, [processInput, toast, selectedGroupTag]);
 
   const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    setIsDraggingOver(true);
-  }, []);
+    if (selectedGroupTag) {
+        setIsDraggingOver(true);
+    }
+  }, [selectedGroupTag]);
 
   const handleDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -267,30 +275,39 @@ export default function AutopilotUploader() {
             </TabsList>
             <TabsContent value="file" className="mt-6">
                 <div
-                onDrop={handleDrop}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                className={cn(
-                    "flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer transition-colors",
-                    isDraggingOver ? "border-primary bg-primary/10" : "border-border hover:border-primary/50 hover:bg-accent/10"
-                )}
+                  onClick={() => {
+                    if (selectedGroupTag && document.getElementById('file-upload')) {
+                      (document.getElementById('file-upload') as HTMLInputElement).click();
+                    } else if (!selectedGroupTag) {
+                       toast({
+                         variant: "destructive",
+                         title: "Group Tag Required",
+                         description: "Please select a Group Tag before uploading a file.",
+                       });
+                    }
+                  }}
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  className={cn(
+                      "flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg transition-colors",
+                      isDraggingOver && selectedGroupTag ? "border-primary bg-primary/10" : "border-border",
+                      selectedGroupTag ? "cursor-pointer hover:border-primary/50 hover:bg-accent/10" : "cursor-not-allowed opacity-60 bg-muted/30"
+                  )}
                 >
-                <UploadCloud className={cn("w-12 h-12 mb-4", isDraggingOver ? "text-primary" : "text-muted-foreground")} />
-                <p className={cn("mb-2 text-sm", isDraggingOver ? "text-primary" : "text-muted-foreground")}>
-                    <span className="font-semibold">Click to upload</span> or drag and drop
-                </p>
-                <p className="text-xs text-muted-foreground">TXT or CSV files (Max {MAX_FILE_SIZE_MB}MB)</p>
-                <Input
-                    id="file-upload"
-                    type="file"
-                    className="hidden"
-                    accept=".txt,.csv"
-                    onChange={handleFileChange}
-                    disabled={!selectedGroupTag}
-                />
-                <Button variant="link" size="sm" className="mt-2" onClick={() => document.getElementById('file-upload')?.click()} disabled={!selectedGroupTag}>
-                    Browse files
-                </Button>
+                  <UploadCloud className={cn("w-12 h-12 mb-4", isDraggingOver && selectedGroupTag ? "text-primary" : "text-muted-foreground")} />
+                  <p className={cn("mb-2 text-sm", isDraggingOver && selectedGroupTag ? "text-primary" : "text-muted-foreground")}>
+                      <span className="font-semibold">Click to upload</span> or drag and drop
+                  </p>
+                  <p className="text-xs text-muted-foreground">TXT or CSV files (Max {MAX_FILE_SIZE_MB}MB)</p>
+                  <Input
+                      id="file-upload"
+                      type="file"
+                      className="hidden"
+                      accept=".txt,.csv"
+                      onChange={handleFileChange}
+                      disabled={!selectedGroupTag}
+                  />
                 </div>
             </TabsContent>
             <TabsContent value="paste" className="mt-6">
@@ -457,5 +474,3 @@ export default function AutopilotUploader() {
     </div>
   );
 }
-
-    
