@@ -743,7 +743,7 @@ export default function AutopilotUploader() {
           Collect Hardware Hash (No Admin - Automated Download & Run)
         </CardTitle>
         <CardDescription>
-          This PowerShell script attempts to download and run the necessary script from GitHub to collect the hardware hash without local admin rights. The hash will be output to the console.
+          This PowerShell script attempts to download and run <code>Invoke-GetHardwareHashWithoutAdmin.ps1</code> from GitHub to collect the hardware hash. The hash will be output to the console.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -753,21 +753,35 @@ export default function AutopilotUploader() {
             <li>Open PowerShell (does not need to be as Administrator) on the target Windows device.</li>
             <li>Copy the script below.</li>
             <li>Paste the script into the PowerShell window and press Enter.</li>
-            <li>The script will attempt to download <code>Invoke-GetHardwareHashWithoutAdmin.ps1</code> from GitHub to a temporary location and then execute it.</li>
+            <li>The script will attempt to download <code>Invoke-GetHardwareHashWithoutAdmin.ps1</code> from GitHub to a temporary location (e.g., <code>$env:TEMP</code>) and then execute it.</li>
             <li>The hardware hash should be displayed in the PowerShell console upon successful execution.</li>
-            <li>Copy this hash from the console and paste it into the "Paste Hashes" tab in the uploader above.</li>
-            <li><strong>Note:</strong> This method's success may depend on internet connectivity, system permissions, and PowerShell execution policies. 
-                If the script fails to download the file (e.g., showing a 404 Not Found error), your network might be blocking access or there could be a temporary issue. 
-                In such cases, you can manually download the <code>Invoke-GetHardwareHashWithoutAdmin.ps1</code> script from the 
-                <a href="https://github.com/Crankers/Invoke-GetHardwareHashWithoutAdmin/tree/main/PowerShell" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline ml-1">
-                GitHub repository <ExternalLink className="inline-block h-3 w-3 ml-0.5" />
-                </a>, then run it locally. 
-                The script might prompt for confirmation if your execution policy is restrictive.
+            <li>
+                <strong>Important Dependencies:</strong> The <code>Invoke-GetHardwareHashWithoutAdmin.ps1</code> script from the linked GitHub repository
+                requires <code>oa3tool.exe</code> (and potentially an <code>OA3.cfg</code> file) to be present in the
+                same directory from which it is executed. When using this automated download script, this means <code>oa3tool.exe</code>
+                would need to be in the temporary directory (e.g., <code>C:\Users\YourUser\AppData\Local\Temp</code>).
+                If <code>oa3tool.exe</code> is not found there, the script will fail (as you might have observed with an error like "oa3tool.exe not recognized").
+            </li>
+            <li>
+                <strong>Troubleshooting:</strong>
+                <ul className="list-disc list-inside pl-4 mt-1 space-y-1">
+                    <li>If the script fails to download (e.g., a 404 Not Found error), check your internet connection or network restrictions.</li>
+                    <li>
+                        If the script downloads but then fails because <code>oa3tool.exe</code> is not found, you will need to ensure <code>oa3tool.exe</code> is available.
+                        A more reliable approach might be to manually download <code>Invoke-GetHardwareHashWithoutAdmin.ps1</code> from the
+                        <a href="https://github.com/Crankers/Invoke-GetHardwareHashWithoutAdmin/tree/main/PowerShell" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline ml-1">
+                        GitHub repository <ExternalLink className="inline-block h-3 w-3 ml-0.5" />
+                        </a>,
+                        place it in a folder alongside <code>oa3tool.exe</code> (and <code>OA3.cfg</code> if needed by that script), and then run <code>Invoke-GetHardwareHashWithoutAdmin.ps1</code> manually from that folder.
+                        <code>oa3tool.exe</code> is typically part of the Windows Assessment and Deployment Kit (ADK).
+                    </li>
+                    <li>PowerShell execution policies might also prevent script execution. You may need to adjust them (e.g., <code>Set-ExecutionPolicy RemoteSigned -Scope Process -Force</code>) or unblock the downloaded <code>.ps1</code> file.</li>
+                </ul>
             </li>
           </ol>
         </div>
          <div>
-          <Label htmlFor="powershell-script-no-admin-download" className="font-semibold">PowerShell Script (Download & Run):</Label>
+          <Label htmlFor="powershell-script-no-admin-download" className="font-semibold">PowerShell Script (Automated Download & Run):</Label>
           <div className="mt-1 relative">
             <Textarea
               id="powershell-script-no-admin-download"
@@ -827,4 +841,5 @@ export default function AutopilotUploader() {
     
 
     
+
 
