@@ -64,6 +64,11 @@ export default function AutopilotUploader() {
     setIsAiLoading(false);
     setShowAiDialog(false);
     setSelectedGroupTag("");
+    // Clear file input as part of reset
+    const fileUploadInput = document.getElementById('file-upload') as HTMLInputElement | null;
+    if (fileUploadInput) {
+        fileUploadInput.value = "";
+    }
   }, []);
 
   const parseHashes = (content: string): string[] => {
@@ -125,11 +130,13 @@ export default function AutopilotUploader() {
             title: "Group Tag Required",
             description: "Please select a Group Tag before processing.",
         });
+        setStage('idle'); // Ensure stage is idle if group tag is missing
         return;
     }
     setRawHashes(parsedInputHashes);
     setStage('uploading');
     setUploadProgress(0);
+    setFileName(fileName || "Pasted Hashes"); // Ensure fileName is set if coming from paste
 
     for (let i = 0; i <= 100; i += 10) {
       await new Promise(resolve => setTimeout(resolve, 50));
@@ -152,50 +159,107 @@ export default function AutopilotUploader() {
       });
       setStage('success');
     }
-  }, [selectedGroupTag, toast]);
+  }, [selectedGroupTag, toast, fileName]);
 
 
-  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      processFile(file);
+  const handleFileUploadError = () => {
+    const fileUploadInput = document.getElementById('file-upload') as HTMLInputElement | null;
+    if (fileUploadInput) {
+        fileUploadInput.value = ""; 
     }
+    setFileName(null); 
+    // Do not reset stage globally here, allow specific error handlers to set stage if needed
   };
 
   const processFile = (file: File) => {
+     const allowedExtensions = ['.txt', '.csv'];
+     const fileNameParts = file.name.split('.');
+     const fileExtension = fileNameParts.length > 1 ? `.${fileNameParts.pop()!.toLowerCase()}` : '';
+
+     if (!allowedExtensions.includes(fileExtension)) {
+        toast({
+            variant: "destructive",
+            title: "Invalid File Type",
+            description: `Only .txt or .csv files are allowed. You provided: ${file.name}`,
+        });
+        handleFileUploadError();
+        return;
+     }
+
      if (file.size > MAX_FILE_SIZE_BYTES) {
       toast({
         variant: "destructive",
         title: "File too large",
         description: `File size cannot exceed ${MAX_FILE_SIZE_MB}MB.`,
       });
+      handleFileUploadError();
       return;
     }
-    setFileName(file.name);
+
+    setFileName(file.name); 
     const reader = new FileReader();
+
     reader.onload = (e) => {
-      const content = e.target?.result as string;
+      const content = e.target?.result;
+      if (typeof content !== 'string') {
+        toast({
+          variant: "destructive",
+          title: "File Read Error",
+          description: `Could not read the content of the file: ${file.name}. It might be empty or corrupted.`,
+        });
+        handleFileUploadError();
+        setStage('idle'); 
+        return;
+      }
       const parsed = parseHashes(content);
       processInput(parsed);
     };
+
+    reader.onerror = () => {
+        toast({
+            variant: "destructive",
+            title: "File Read Error",
+            description: `An error occurred while reading the file: ${file.name}.`,
+        });
+        handleFileUploadError();
+        setStage('idle');
+    };
     reader.readAsText(file);
   }
+
+  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (!selectedGroupTag) {
+        toast({
+            variant: "destructive",
+            title: "Group Tag Required",
+            description: "Please select a Group Tag before choosing a file.",
+        });
+        handleFileUploadError(); // Clear the input
+        return;
+      }
+      processFile(file);
+    }
+  };
 
   const handleDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
     setIsDraggingOver(false);
-    if (selectedGroupTag && event.dataTransfer.files && event.dataTransfer.files[0]) {
-      const file = event.dataTransfer.files[0];
-       processFile(file);
-    } else if (!selectedGroupTag) {
+    if (!selectedGroupTag) {
         toast({
             variant: "destructive",
             title: "Group Tag Required",
             description: "Please select a Group Tag before dropping a file.",
         });
+        return;
     }
-  }, [processInput, toast, selectedGroupTag]);
+    if (event.dataTransfer.files && event.dataTransfer.files[0]) {
+      const file = event.dataTransfer.files[0];
+       processFile(file);
+    }
+  }, [processInput, toast, selectedGroupTag]); // processInput is okay if its dependencies are stable
 
   const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -212,8 +276,16 @@ export default function AutopilotUploader() {
   }, []);
 
   const handleProcessPasted = () => {
+    if (!selectedGroupTag) {
+        toast({
+            variant: "destructive",
+            title: "Group Tag Required",
+            description: "Please select a Group Tag before processing pasted text.",
+        });
+        return;
+    }
     const parsed = parseHashes(pastedText);
-    setFileName("Pasted Hashes");
+    setFileName("Pasted Hashes"); // Explicitly set for pasted content
     processInput(parsed);
   };
 
@@ -239,9 +311,8 @@ export default function AutopilotUploader() {
   };
   
   useEffect(() => {
-    if (stage === 'uploading' && uploadProgress === 100 && (validationIssues.length > 0 || confirmationDetails)) {
-        // Validation logic has already run and updated the stage if needed
-    }
+    // This effect primarily serves as a monitor or for future side effects based on these state changes.
+    // The core logic for stage transitions is handled within processInput.
   }, [stage, uploadProgress, validationIssues, confirmationDetails]);
 
 
@@ -265,13 +336,13 @@ export default function AutopilotUploader() {
                         ))}
                     </SelectContent>
                 </Select>
-                {!selectedGroupTag && <p className="text-sm text-destructive mt-1">Please select a group tag.</p>}
+                {!selectedGroupTag && stage === 'idle' && <p className="text-sm text-destructive mt-1">Please select a group tag to enable upload options.</p>}
             </div>
 
             <Tabs defaultValue="file" className="w-full">
             <TabsList className="grid w-full grid-cols-2 bg-muted p-1 h-auto">
-                <TabsTrigger value="file" className="py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm"><UploadCloud className="mr-2 h-5 w-5" />Upload File</TabsTrigger>
-                <TabsTrigger value="paste" className="py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm"><ClipboardPaste className="mr-2 h-5 w-5" />Paste Hashes</TabsTrigger>
+                <TabsTrigger value="file" className="py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm" disabled={!selectedGroupTag}><UploadCloud className="mr-2 h-5 w-5" />Upload File</TabsTrigger>
+                <TabsTrigger value="paste" className="py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm" disabled={!selectedGroupTag}><ClipboardPaste className="mr-2 h-5 w-5" />Paste Hashes</TabsTrigger>
             </TabsList>
             <TabsContent value="file" className="mt-6">
                 <div
@@ -294,12 +365,21 @@ export default function AutopilotUploader() {
                       isDraggingOver && selectedGroupTag ? "border-primary bg-primary/10" : "border-border",
                       selectedGroupTag ? "cursor-pointer hover:border-primary/50 hover:bg-accent/10" : "cursor-not-allowed opacity-60 bg-muted/30"
                   )}
+                  role={selectedGroupTag ? "button" : undefined}
+                  tabIndex={selectedGroupTag ? 0 : -1}
+                  aria-disabled={!selectedGroupTag}
+                  onKeyDown={(e) => {
+                    if (selectedGroupTag && (e.key === 'Enter' || e.key === ' ')) {
+                        (document.getElementById('file-upload') as HTMLInputElement)?.click();
+                    }
+                  }}
+
                 >
-                  <UploadCloud className={cn("w-12 h-12 mb-4", isDraggingOver && selectedGroupTag ? "text-primary" : "text-muted-foreground")} />
-                  <p className={cn("mb-2 text-sm", isDraggingOver && selectedGroupTag ? "text-primary" : "text-muted-foreground")}>
+                  <UploadCloud className={cn("w-12 h-12 mb-4", isDraggingOver && selectedGroupTag ? "text-primary" : "text-muted-foreground", !selectedGroupTag && "text-muted-foreground/50")} />
+                  <p className={cn("mb-2 text-sm", isDraggingOver && selectedGroupTag ? "text-primary" : "text-muted-foreground", !selectedGroupTag && "text-muted-foreground/50")}>
                       <span className="font-semibold">Click to upload</span> or drag and drop
                   </p>
-                  <p className="text-xs text-muted-foreground">TXT or CSV files (Max {MAX_FILE_SIZE_MB}MB)</p>
+                  <p className={cn("text-xs text-muted-foreground", !selectedGroupTag && "text-muted-foreground/50")}>TXT or CSV files (Max {MAX_FILE_SIZE_MB}MB)</p>
                   <Input
                       id="file-upload"
                       type="file"
@@ -317,7 +397,7 @@ export default function AutopilotUploader() {
                     id="paste-area"
                     value={pastedText}
                     onChange={(e) => setPastedText(e.target.value)}
-                    placeholder="Enter device hashes, one per line..."
+                    placeholder={selectedGroupTag ? "Enter device hashes, one per line..." : "Select a group tag to enable pasting."}
                     rows={10}
                     className="text-sm"
                     disabled={!selectedGroupTag}
@@ -474,3 +554,4 @@ export default function AutopilotUploader() {
     </div>
   );
 }
+
