@@ -807,7 +807,7 @@ export default function AutopilotUploader() {
                 </ul>
             </li>
             <li>The hardware hash will be saved to a <code>hash.txt</code> file in your Downloads folder.</li>
-            <li>The script will also attempt to clean up the downloaded ZIP file and the extracted folder from your temporary directory after execution.</li>
+            
             <li>
                 <strong>Troubleshooting:</strong>
                 <ul className="list-disc list-inside pl-4 mt-1 space-y-1">
