@@ -81,17 +81,60 @@ export default function AutopilotUploader() {
     }
   }, []);
 
-  const parseHashes = (content: string): string[] => {
-    return content
+  const parseHashes = useCallback((content: string): string[] => {
+    const lines = content
       .split(/\r?\n/)
-      .map(hash => hash.trim())
-      .filter(hash => hash.length > 0);
-  };
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
+
+    if (lines.length === 0) {
+      return [];
+    }
+
+    const outputHashes: string[] = [];
+
+    const firstLineLower = lines[0].toLowerCase();
+    // Check if the first non-empty line looks like a header from Get-WindowsAutopilotInfo.ps1
+    const isAutopilotCsv = 
+        (firstLineLower.includes('device serial number') || firstLineLower.includes('serialnumber')) &&
+        (firstLineLower.includes('hardware hash') || firstLineLower.includes('hardwarehash')) &&
+        lines[0].includes(','); // Ensure it's actually comma-separated
+
+    if (isAutopilotCsv) {
+      // Start from the second line (index 1) to skip the header
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i];
+        const columns = line.split(','); // Simple split, assumes hashes don't contain commas
+        if (columns.length >= 3) {
+          let hash = columns[2].trim(); // Hardware Hash is the 3rd column (index 2)
+          // Remove surrounding quotes, if any
+          if (hash.startsWith('"') && hash.endsWith('"')) {
+            hash = hash.substring(1, hash.length - 1);
+          }
+          if (hash.length > 0) { // Ensure we have a non-empty hash
+            outputHashes.push(hash);
+          }
+        }
+      }
+    } else {
+      // Not a recognized Autopilot CSV.
+      // Treat each line as a potential hash candidate IF it does not contain commas.
+      // This is for plain text lists of hashes.
+      for (const line of lines) {
+        if (!line.includes(',')) {
+            outputHashes.push(line);
+        }
+        // Lines with commas that are not part of a recognized Autopilot CSV are skipped.
+      }
+    }
+    return outputHashes;
+  }, []);
+
 
   const validateHashes = useCallback((hashes: string[]): ValidationIssue[] => {
     const issues: ValidationIssue[] = [];
     if (hashes.length === 0) {
-      issues.push({ type: 'empty', message: 'No hashes found. Please provide some hashes.' });
+      issues.push({ type: 'empty', message: 'No hashes found. Please provide some hashes or check file content.' });
       return issues;
     }
     if (hashes.length > MAX_HASHES) {
@@ -101,7 +144,10 @@ export default function AutopilotUploader() {
     const seen = new Set<string>();
     const duplicates: string[] = [];
     hashes.forEach(hash => {
+      // Base64 regex: allows A-Z, a-z, 0-9, +, /, and = (typically at the end for padding)
+      // A typical 4K HH is very long, so length < 10 is a safe bet for an invalid short string.
       if (!/^[A-Za-z0-9+/]*=?=?$/.test(hash) || hash.length < 10) {
+         // These specific strings are used for testing the duplicate/invalid logic, don't flag them here as invalid format.
          if(hash !== "duplicate_hash_example" && hash !== "another_duplicate" && hash !== "invalid_hash_example") {
           issues.push({ type: 'invalid_format', message: `Hash "${hash.substring(0,30)}..." appears to have an invalid format or characters. Hashes should be Base64 encoded.`, count: (issues.find(i => i.type === 'invalid_format')?.count || 0) + 1 });
         }
@@ -115,13 +161,14 @@ export default function AutopilotUploader() {
       }
     });
     
+    // Specific test cases for duplicate/invalid logic (can be removed for production)
     if (hashes.includes("duplicate_hash_example") && hashes.filter(h => h === "duplicate_hash_example").length > 1) {
       if (!duplicates.includes("duplicate_hash_example")) duplicates.push("duplicate_hash_example");
     }
     if (hashes.includes("another_duplicate") && hashes.filter(h => h === "another_duplicate").length > 1) {
       if (!duplicates.includes("another_duplicate")) duplicates.push("another_duplicate");
     }
-    if (hashes.includes("invalid_hash_example")) {
+    if (hashes.includes("invalid_hash_example")) { // This specific string is meant to be invalid.
         issues.push({ type: 'invalid_format', message: `Hash "invalid_hash_example" has an invalid format.`, count: (issues.find(i => i.type === 'invalid_format')?.count || 0) + 1 });
     }
 
@@ -141,7 +188,6 @@ export default function AutopilotUploader() {
     setFileName(null); 
   }, [setFileName]);
 
-
   const processInput = useCallback(async (parsedInputHashes: string[]) => {
     if (!selectedGroupTag) {
         toast({
@@ -155,7 +201,6 @@ export default function AutopilotUploader() {
     setRawHashes(parsedInputHashes);
     setStage('uploading');
     setUploadProgress(0);
-    // fileName is already set by file upload or pasted text handler
     setSubmissionStatusMessage('Validating local file and hashes...');
     setValidationIssues([]); 
 
@@ -227,7 +272,7 @@ export default function AutopilotUploader() {
         });
       }
     }
-  }, [selectedGroupTag, toast, validateHashes]);
+  }, [selectedGroupTag, toast, validateHashes, parseHashes]);
 
 
   const processFile = useCallback((file: File) => {
