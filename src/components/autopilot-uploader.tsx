@@ -58,6 +58,7 @@ Install-Script -Name Get-WindowsAutopilotInfo -Force -Confirm:$false
 Get-WindowsAutopilotInfo.ps1 -OutputFile AutopilotHWID.csv`;
 
 const POWERSHELL_SCRIPT_DOWNLOAD_AND_RUN_NO_ADMIN = `# Script to download the Crankers/Invoke-GetHardwareHashWithoutAdmin repository, unzip it, and run the script.
+Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope CurrentUser -Confirm:\$false -Force
 
 \$repoOwner = "Crankers"
 \$repoName = "Invoke-GetHardwareHashWithoutAdmin"
@@ -69,7 +70,7 @@ const POWERSHELL_SCRIPT_DOWNLOAD_AND_RUN_NO_ADMIN = `# Script to download the Cr
 \$tempPath = \$env:TEMP
 \$localZipPath = Join-Path -Path \$tempPath -ChildPath \$zipFileName
 \$extractionBase = Join-Path -Path \$tempPath -ChildPath "" # Expand-Archive extracts to a folder named by zip inside this path
-\$extractedRepoPath = Join-Path -Path \$extractionBase -ChildPath \$extractedFolderName 
+\$extractedRepoPath = Join-Path -Path \$extractionBase -ChildPath \$extractedFolderName
 \$scriptExecutionDir = Join-Path -Path \$extractedRepoPath -ChildPath \$scriptSubPath
 \$scriptToRun = Join-Path -Path \$scriptExecutionDir -ChildPath "Invoke-GetHardwareHashWithoutAdmin.ps1"
 
@@ -132,7 +133,7 @@ try {
 Write-Host "Attempting to execute \$(\$scriptToRun) (it may take a moment)..."
 Write-Host "This script relies on oa3tool.exe and OA3.cfg being in the same directory (\$scriptExecutionDir)."
 & .\\Invoke-GetHardwareHashWithoutAdmin.ps1
-`;
+Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Confirm:\$false -Force`;
 
 
 export default function AutopilotUploader() {
@@ -785,6 +786,7 @@ export default function AutopilotUploader() {
             <li>Paste the script into the PowerShell window and press Enter.</li>
             <li>The script will:
                 <ul className="list-disc list-inside pl-4 mt-1 space-y-1">
+                    <li>Temporarily set your PowerShell execution policy to `Unrestricted` to allow the script to run, then sets it back to `RemoteSigned` after completion.</li>
                     <li>Download the <a href="https://github.com/Crankers/Invoke-GetHardwareHashWithoutAdmin" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Crankers/Invoke-GetHardwareHashWithoutAdmin</a> repository as a ZIP file to your temporary directory.</li>
                     <li>Extract the ZIP file.</li>
                     <li>Navigate into the extracted <code>PowerShell</code> subfolder.</li>
@@ -797,7 +799,6 @@ export default function AutopilotUploader() {
                 <strong>Troubleshooting:</strong>
                 <ul className="list-disc list-inside pl-4 mt-1 space-y-1">
                     <li>If the script fails (e.g., because <code>oa3tool.exe</code> is still not found within the repository's <code>PowerShell</code> folder, or due to network/permission issues), you may need to manually ensure <code>oa3tool.exe</code> (typically part of the Windows Assessment and Deployment Kit - ADK) is available where the script expects it.</li>
-                    <li>PowerShell execution policies might also prevent script execution. You may need to adjust them (e.g., <code>Set-ExecutionPolicy RemoteSigned -Scope Process -Force</code>) or unblock the downloaded <code>.ps1</code> file manually if it's still present in the temp folder after a failed run.</li>
                     <li>Ensure your PowerShell version is 5.0 or higher for <code>Expand-Archive</code> to work correctly.</li>
                 </ul>
             </li>
@@ -926,6 +927,7 @@ export default function AutopilotUploader() {
 
 
     
+
 
 
 
