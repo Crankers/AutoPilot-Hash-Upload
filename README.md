@@ -118,3 +118,4 @@ The list of available Autopilot Group Tags in the dropdown can be customized via
 
 ![Example Image](https://github.com/Crankers/AutoPilot-Hash-Upload/blob/Dev/docs/Example.png?raw=true)
 
+.
